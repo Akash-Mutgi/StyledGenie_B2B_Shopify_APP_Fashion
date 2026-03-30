@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StyledGenie Storefront Widget Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <p class="eyebrow">Customer Experience Demo</p>
+        <h1>StyledGenie Storefront AI Widget</h1>
+        <p class="hero-copy">
+          This is a simple demo screen that shows how the shopper-facing AI assistant
+          can handle outfit curation, inspiration uploads, complete-the-look, and
+          support questions.
+        </p>
+      </section>
+
+      <section class="widget-panel">
+        <div class="widget-header">
+          <div class="widget-brand-lockup">
+            <div class="widget-logo" id="widgetLogo" aria-hidden="true"></div>
+            <div>
+              <p class="widget-label" id="widgetAssistantName">StyledGenie AI</p>
+              <h2 id="widgetWelcomeTitle">Fashion Assistant</h2>
+            </div>
+          </div>
+          <span class="status-pill">Demo Mode</span>
+        </div>
+
+        <div class="mode-list">
+          <button class="mode-button active" data-mode="outfit">Outfit Curation</button>
+          <button class="mode-button" data-mode="inspire">Get Inspired</button>
+          <button class="mode-button" data-mode="complete">Complete The Look</button>
+          <button class="mode-button" data-mode="support">Support</button>
+        </div>
+
+        <div id="chatLog" class="chat-log"></div>
+
+        <div class="upload-card">
+          <label for="imageInput">Optional image upload</label>
+          <input id="imageInput" type="file" accept="image/*" />
+          <p class="helper-text">
+            Use this for inspiration images or outfit photos in a future backend-connected version.
+          </p>
+        </div>
+
+        <form id="chatForm" class="chat-form">
+          <input
+            id="chatInput"
+            type="text"
+            placeholder="Ask for a full outfit, upload inspiration, or ask a support question..."
+          />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,27 @@
+{% assign api_base_url = block.settings.api_base_url | default: 'http://127.0.0.1:8000' %}
+
+{{ 'chat-widget.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'chat-widget.js' | asset_url }}" defer></script>
+
+<div
+  id="styledgenie-chat-root"
+  class="styledgenie-chat-root"
+  data-api-base="{{ api_base_url }}"
+  data-cart-root="{{ routes.root_url }}"
+  data-store-domain="{{ shop.permanent_domain }}"
+></div>
+
+{% schema %}
+{
+  "name": "StyledGenie Chat",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_base_url",
+      "label": "Backend API Base URL",
+      "default": "http://127.0.0.1:8000"
+    }
+  ]
+}
+{% endschema %}
