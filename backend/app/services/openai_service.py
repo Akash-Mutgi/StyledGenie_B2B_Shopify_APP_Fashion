@@ -24,6 +24,11 @@ class StylistPlan(BaseModel):
     follow_up_question: Optional[str] = None
 
 
+class ProductDescriptionPlan(BaseModel):
+    short_description: str
+    merchandising_notes: list[str] = Field(default_factory=list)
+
+
 class OpenAIService:
     def __init__(self) -> None:
         self.client = OpenAI(api_key=settings.openai_api_key) if OpenAI and settings.openai_api_key else None
@@ -36,7 +41,7 @@ class OpenAIService:
         shopper_message: str,
         detected_tags: list[str],
         candidate_products: list[ProductRecommendation],
-    ) -> tuple[str, list[ProductRecommendation], list[StylingInsight]]:
+    ) -> tuple[str, list[ProductRecommendation], list[StylingInsight], Optional[str]]:
         fallback_reply = self.build_text_reply(
             mode=mode,
             message=shopper_message,
@@ -52,7 +57,7 @@ class OpenAIService:
         )
 
         if self.client is None or not candidate_products:
-            return fallback_reply, fallback_products, fallback_insights
+            return fallback_reply, fallback_products, fallback_insights, None
 
         try:
             response = self.client.responses.parse(
@@ -77,10 +82,10 @@ class OpenAIService:
             plan = response.output_parsed
         except Exception as error:
             logger.warning("OpenAI stylist call failed. Falling back to local recommendation copy. %s", error)
-            return fallback_reply, fallback_products, fallback_insights
+            return fallback_reply, fallback_products, fallback_insights, None
 
         if not plan:
-            return fallback_reply, fallback_products, fallback_insights
+            return fallback_reply, fallback_products, fallback_insights, None
 
         selected_products = self._select_products(candidate_products, plan.selected_product_ids)
         if not selected_products:
@@ -90,13 +95,67 @@ class OpenAIService:
         follow_up = (plan.follow_up_question or "").strip()
         styling_insights = plan.styling_insights or fallback_insights
 
-        if follow_up:
-            reply = f"{reply} {follow_up}"
-
         if not styling_insights:
             styling_insights = fallback_insights
 
-        return reply, selected_products, styling_insights[:3]
+        return reply, selected_products, styling_insights[:4], follow_up or None
+
+    def generate_product_description(self, product: dict) -> tuple[str, list[str]]:
+        fallback_description, fallback_notes = self._fallback_product_description(product)
+
+        if self.client is None:
+            return fallback_description, fallback_notes
+
+        merchant_context = self._merchant_context()
+        payload = {
+            "product": {
+                "title": product.get("title"),
+                "category": product.get("category"),
+                "tags": product.get("tags", []),
+                "description": product.get("description"),
+                "price": product.get("price"),
+            },
+            "merchant_context": {
+                "brand_name": merchant_context.get("brand_name"),
+                "brand_summary": merchant_context.get("brand_summary"),
+                "catalog_intelligence": merchant_context.get("catalog_intelligence"),
+                "tone_of_voice": (merchant_context.get("chatbot_customization") or {}).get("tone_of_voice"),
+            },
+            "output_rules": {
+                "short_description": "Exactly 1 short paragraph. Premium, concise, polished, merchant-facing copy.",
+                "merchandising_notes": "2 or 3 practical bullets the merchant can use for tags, merchandising, or PDP emphasis.",
+            },
+        }
+
+        try:
+            response = self.client.responses.parse(
+                model=self.model,
+                input=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You write concise premium ecommerce product descriptions for fashion stores. "
+                            "Use only the provided product facts. Never invent fabric composition, fit, size, or color details. "
+                            "Keep copy polished, confident, and commercially useful."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(payload),
+                    },
+                ],
+                text_format=ProductDescriptionPlan,
+            )
+            plan = response.output_parsed
+        except Exception as error:
+            logger.warning("OpenAI product description call failed. Falling back to local copy. %s", error)
+            return fallback_description, fallback_notes
+
+        if not plan or not (plan.short_description or "").strip():
+            return fallback_description, fallback_notes
+
+        notes = [note.strip() for note in (plan.merchandising_notes or []) if (note or "").strip()]
+        return plan.short_description.strip(), notes[:3] or fallback_notes
 
     def build_text_reply(
         self,
@@ -288,6 +347,9 @@ class OpenAIService:
                 "assistant_name": workspace.chatbot_customization.assistant_name,
                 "tone_of_voice": workspace.chatbot_customization.tone_of_voice,
                 "stylist_signature": workspace.chatbot_customization.stylist_signature,
+                "recommendation_strictness": workspace.chatbot_customization.recommendation_strictness,
+                "product_prioritization": workspace.chatbot_customization.product_prioritization,
+                "decision_mode_default": workspace.chatbot_customization.decision_mode_default,
             },
             "catalog_intelligence": {
                 "target_customer": workspace.catalog_intelligence.target_customer,
@@ -348,3 +410,24 @@ class OpenAIService:
         if len(titles) == 2:
             return f"{titles[0]} and {titles[1]}"
         return f"{titles[0]}, {titles[1]}, and {titles[2]}"
+
+    def _fallback_product_description(self, product: dict) -> tuple[str, list[str]]:
+        title = (product.get("title") or "This piece").strip()
+        category = (product.get("category") or "fashion essential").strip().lower()
+        tags = [str(tag).strip().lower() for tag in (product.get("tags") or []) if str(tag).strip()]
+        priority_tags = [tag for tag in tags if tag not in {"apparel", "general", "tops", "bottoms", "footwear"}]
+        lead_tags = ", ".join(priority_tags[:3]) if priority_tags else "everyday wearability"
+
+        description = (
+            f"{title} is a polished {category} designed to bring {lead_tags} into the wardrobe with an easy, elevated finish."
+        )
+        notes = [
+            f"Lead with {category} positioning and the {lead_tags} story on the PDP.",
+            "Use this piece in premium styling edits and occasion-driven recommendation sets.",
+        ]
+        if priority_tags:
+            notes.append(f"Priority enrichment tags: {', '.join(priority_tags[:3])}.")
+        else:
+            notes.append("Add richer fit, occasion, and color tags to sharpen recommendation quality.")
+
+        return description, notes[:3]

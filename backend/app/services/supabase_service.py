@@ -395,6 +395,16 @@ class SupabaseService:
 
         return normalized_products
 
+    def fetch_catalog_product(self, product_id: str) -> Optional[dict]:
+        if not product_id:
+            return None
+
+        for product in self.fetch_catalog_products():
+            if product.get("id") == product_id:
+                return product
+
+        return None
+
     def fetch_workspace_snapshot(self) -> MerchantWorkspaceSnapshot:
         overview = self.fetch_dashboard_snapshot()
         client = self.get_client()
@@ -1507,6 +1517,7 @@ class SupabaseService:
 
         return [
             DashboardProductItem(
+                id=item.get("id"),
                 title=item.get("title") or "Untitled product",
                 category=item.get("category") or "General",
                 price=str(item.get("price")) if item.get("price") not in (None, "") else None,

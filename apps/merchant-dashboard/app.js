@@ -67,6 +67,11 @@ const chatbotTargetMarkets = [
   "Asia Pacific",
   "Global",
 ];
+const recommendationStrictnessOptions = ["balanced", "strict", "flexible"];
+const autoApplyOptions = ["review_first", "auto_apply"];
+const productPrioritizationOptions = ["best_match", "more_premium", "more_accessible"];
+const strictModeHandlingOptions = ["repair_then_retry", "retry_stricter", "fail_fast"];
+const decisionModeOptions = ["offer_choice", "show_options", "decide_for_me"];
 
 let workspace = null;
 let activeSection = "overview";
@@ -80,6 +85,13 @@ const analyticsRefreshIntervalMs = 5000;
 let builderPreviewFlow = "outfit_curation";
 let builderPreviewPrompt = "";
 let builderPriorityFlow = "";
+let productDescriptionState = {
+  productId: "",
+  loading: false,
+  description: "",
+  notes: [],
+  error: "",
+};
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -2315,6 +2327,12 @@ function renderChatbotSection() {
                   <li id="chatbotPreviewMarket">Target market: ${escapeHtml(
                     settings.target_market
                   )}</li>
+                  <li id="chatbotPreviewStrictness">Recommendation strictness: ${escapeHtml(
+                    settings.recommendation_strictness
+                  )}</li>
+                  <li id="chatbotPreviewDecisionMode">Decision mode: ${escapeHtml(
+                    settings.decision_mode_default
+                  )}</li>
                 </ul>
               </div>
 
@@ -2476,6 +2494,74 @@ function renderChatbotSection() {
               </div>
             </div>
 
+            <div class="control-group">
+              <p class="control-group-title">Merchant Controls</p>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Recommendation Strictness</span>
+                  <select name="recommendation_strictness">
+                    ${renderSelectOptions(
+                      recommendationStrictnessOptions,
+                      settings.recommendation_strictness
+                    )}
+                  </select>
+                  <small class="field-hint">How tightly the assistant should stay inside the strongest styling match.</small>
+                </label>
+
+                <label class="field">
+                  <span>Decision Mode Default</span>
+                  <select name="decision_mode_default">
+                    ${renderSelectOptions(decisionModeOptions, settings.decision_mode_default)}
+                  </select>
+                  <small class="field-hint">Choose whether shoppers are prompted to compare or get one confident direction.</small>
+                </label>
+
+                <label class="field">
+                  <span>Product Prioritization</span>
+                  <select name="product_prioritization">
+                    ${renderSelectOptions(
+                      productPrioritizationOptions,
+                      settings.product_prioritization
+                    )}
+                  </select>
+                  <small class="field-hint">Bias recommendations toward premium, accessible, or pure best-match products.</small>
+                </label>
+
+                <label class="field">
+                  <span>Strict Mode Handling</span>
+                  <select name="strict_mode_handling">
+                    ${renderSelectOptions(
+                      strictModeHandlingOptions,
+                      settings.strict_mode_handling
+                    )}
+                  </select>
+                  <small class="field-hint">Control whether StyledGenie repairs weak outputs or rejects them immediately.</small>
+                </label>
+
+                <label class="field">
+                  <span>Product Intelligence Apply Mode</span>
+                  <select name="auto_apply_product_intelligence">
+                    ${renderSelectOptions(
+                      autoApplyOptions,
+                      settings.auto_apply_product_intelligence
+                    )}
+                  </select>
+                  <small class="field-hint">Decide if AI tagging should auto-apply or wait for merchant review.</small>
+                </label>
+
+                <label class="field">
+                  <span>Support Routing Email</span>
+                  <input
+                    name="support_routing_email"
+                    type="email"
+                    value="${escapeHtml(settings.support_routing_email)}"
+                    placeholder="support@yourstore.com"
+                  />
+                  <small class="field-hint">Used when the assistant needs to route damaged-item or escalation cases.</small>
+                </label>
+              </div>
+            </div>
+
             <div class="form-actions">
               <button class="primary-button" type="submit">Save Chatbot Customization</button>
             </div>
@@ -2536,9 +2622,9 @@ function renderChatbotSection() {
         <article class="workspace-card">
           <div class="card-header">
             <div>
-              <p class="card-eyebrow">Merchant Brain Edge</p>
-              <h3>Signals competitors usually hide</h3>
-              <p class="card-copy">This layer makes it obvious what is powering the assistant and where trust can still break.</p>
+              <p class="card-eyebrow">AI Performance Overview</p>
+              <h3>Merchant-facing readiness</h3>
+              <p class="card-copy">See whether catalog quality, support coverage, and styling memory are strong enough to drive confident shopper experiences.</p>
             </div>
           </div>
           <div class="memory-surface-grid">
@@ -2570,8 +2656,8 @@ function renderChatbotSection() {
           </div>
           <div class="callout-card premium-callout">
             <p>
-              New idea: this page now shows a live trust surface for the assistant, so merchants can see whether
-              brand memory, catalog intelligence, and commerce visibility are all strong enough before they push new flows live.
+              Use this surface as a simple go-live check: if product signals, support answers, and catalog coverage look healthy here,
+              the storefront assistant is much more likely to feel sharp, decisive, and conversion-friendly.
             </p>
           </div>
         </article>
@@ -2620,9 +2706,131 @@ function renderChatbotSection() {
   `;
 }
 
+function renderProductDescriptionStudio(snapshot) {
+  const products = (snapshot.recent_products || []).filter((item) => item.id);
+  if (!products.length) {
+    return `
+      <article class="workspace-card workspace-card-full">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">AI Product Descriptions</p>
+            <h3>Description Studio</h3>
+            <p class="card-copy">Sync more products to generate polished, merchant-ready description drafts.</p>
+          </div>
+        </div>
+        <p class="empty-copy">No synced products are ready for description drafting yet.</p>
+      </article>
+    `;
+  }
+
+  const selectedId = products.some((item) => item.id === productDescriptionState.productId)
+    ? productDescriptionState.productId
+    : products[0].id;
+  const selectedProduct = products.find((item) => item.id === selectedId) || products[0];
+  const isLoading =
+    productDescriptionState.loading && productDescriptionState.productId === selectedProduct.id;
+  const hasDraft =
+    productDescriptionState.description &&
+    productDescriptionState.productId === selectedProduct.id &&
+    !isLoading;
+  const hasError =
+    productDescriptionState.error &&
+    productDescriptionState.productId === selectedProduct.id &&
+    !isLoading;
+
+  const outputMarkup = isLoading
+    ? `<p class="card-copy">Generating a concise premium draft now...</p>`
+    : hasDraft
+      ? `
+          <div class="description-output-card">
+            <p class="card-eyebrow">Draft Description</p>
+            <p class="description-output-copy">${escapeHtml(productDescriptionState.description)}</p>
+            <div class="description-note-list">
+              ${(productDescriptionState.notes || [])
+                .map((note) => `<p>${escapeHtml(note)}</p>`)
+                .join("")}
+            </div>
+          </div>
+        `
+      : hasError
+        ? `<p class="empty-copy">${escapeHtml(productDescriptionState.error)}</p>`
+        : `<p class="empty-copy">Choose a product to generate a short, polished draft with merchandising notes.</p>`;
+
+  return `
+    <article class="workspace-card workspace-card-full">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">AI Product Descriptions</p>
+          <h3>Description Studio</h3>
+          <p class="card-copy">Generate concise PDP copy and merchant notes without leaving the catalog workflow.</p>
+        </div>
+      </div>
+
+      <div class="description-studio-grid">
+        <div class="settings-data-list">
+          ${products
+            .map(
+              (item) => `
+                <article class="settings-product-row${item.id === selectedId ? " active-description-product" : ""}">
+                  <div class="settings-product-lockup">
+                    ${
+                      item.image_url
+                        ? `<img class="settings-product-image" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(
+                            item.title
+                          )}" />`
+                        : `<div class="settings-product-fallback">${escapeHtml(
+                            getBrandInitials(item.category || item.title)
+                          )}</div>`
+                    }
+                    <div>
+                      <p class="list-title">${escapeHtml(item.title)}</p>
+                      <p class="list-subtitle">${escapeHtml(item.category || "General")}</p>
+                    </div>
+                  </div>
+                  <div class="description-action-stack">
+                    <strong>${escapeHtml(formatPrice(item.price))}</strong>
+                    <button
+                      class="secondary-button"
+                      type="button"
+                      data-action="generate-product-description"
+                      data-product-id="${escapeHtml(item.id)}"
+                    >
+                      ${
+                        productDescriptionState.productId === item.id && hasDraft
+                          ? "Refresh draft"
+                          : "Generate draft"
+                      }
+                    </button>
+                  </div>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+
+        <div class="description-preview-shell">
+          <div class="detail-list">
+            <div class="detail-row"><span>Selected product</span><strong>${escapeHtml(
+              selectedProduct.title
+            )}</strong></div>
+            <div class="detail-row"><span>Category</span><strong>${escapeHtml(
+              selectedProduct.category || "General"
+            )}</strong></div>
+            <div class="detail-row"><span>Price</span><strong>${escapeHtml(
+              formatPrice(selectedProduct.price)
+            )}</strong></div>
+          </div>
+          ${outputMarkup}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function renderCatalogSection() {
   const settings = workspace.catalog_intelligence;
   const profile = workspace.profile;
+  const descriptionStudio = renderProductDescriptionStudio(workspace.overview);
 
   return `
     <section class="section-stack">
@@ -2718,12 +2926,14 @@ function renderCatalogSection() {
 
           <div class="callout-card">
             <p>
-              Once a store is connected, this workspace becomes the operating brain for recommendations, styling rules,
-              customer care, and brand training.
+              This is where product intelligence becomes merchant-ready: tighter tags, clearer compatibility rules,
+              stronger sizing signals, and cleaner styling outputs across the storefront assistant.
             </p>
           </div>
         </article>
       </div>
+
+      ${descriptionStudio}
     </section>
   `;
 }
@@ -3103,6 +3313,15 @@ function collectChatbotPayload(form) {
     accent_text_style: getFormValue(form, 'select[name="accent_text_style"]'),
     body_text_style: getFormValue(form, 'select[name="body_text_style"]'),
     target_market: getFormValue(form, 'select[name="target_market"]'),
+    recommendation_strictness: getFormValue(form, 'select[name="recommendation_strictness"]'),
+    auto_apply_product_intelligence: getFormValue(
+      form,
+      'select[name="auto_apply_product_intelligence"]'
+    ),
+    product_prioritization: getFormValue(form, 'select[name="product_prioritization"]'),
+    support_routing_email: getFormValue(form, 'input[name="support_routing_email"]'),
+    strict_mode_handling: getFormValue(form, 'select[name="strict_mode_handling"]'),
+    decision_mode_default: getFormValue(form, 'select[name="decision_mode_default"]'),
     suggested_prompts: getFormValue(form, 'textarea[name="suggested_prompts"]')
       .split("\n")
       .map((item) => item.trim())
@@ -3127,6 +3346,8 @@ function updateChatbotPreviewFromForm(form) {
   const previewTone = document.getElementById("chatbotPreviewTone");
   const previewTypography = document.getElementById("chatbotPreviewTypography");
   const previewMarket = document.getElementById("chatbotPreviewMarket");
+  const previewStrictness = document.getElementById("chatbotPreviewStrictness");
+  const previewDecisionMode = document.getElementById("chatbotPreviewDecisionMode");
   const previewPrompts = document.getElementById("chatbotPreviewPrompts");
 
   if (previewShell) {
@@ -3181,6 +3402,18 @@ function updateChatbotPreviewFromForm(form) {
 
   if (previewMarket) {
     previewMarket.textContent = `Target market: ${draft.target_market || "Europe"}`;
+  }
+
+  if (previewStrictness) {
+    previewStrictness.textContent = `Recommendation strictness: ${
+      draft.recommendation_strictness || "balanced"
+    }`;
+  }
+
+  if (previewDecisionMode) {
+    previewDecisionMode.textContent = `Decision mode: ${
+      draft.decision_mode_default || "offer_choice"
+    }`;
   }
 
   if (previewPrompts) {
@@ -3361,6 +3594,72 @@ async function saveSection(endpoint, payload, successText) {
   }
 }
 
+async function generateProductDescription(productId) {
+  if (!productId) {
+    return;
+  }
+
+  productDescriptionState = {
+    productId,
+    loading: true,
+    description: "",
+    notes: [],
+    error: "",
+  };
+  renderSection();
+  setStatus("Generating product description...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_id: productId,
+      }),
+    });
+
+    if (!response.ok) {
+      let message = "Description generation failed";
+      try {
+        const payload = await response.json();
+        message = payload.detail || message;
+      } catch (error) {
+        message = response.statusText || message;
+      }
+      throw new Error(message);
+    }
+
+    const payload = await response.json();
+    productDescriptionState = {
+      productId,
+      loading: false,
+      description: payload.short_description || "",
+      notes: payload.merchandising_notes || [],
+      error: "",
+    };
+    setStatus("Product description ready", "success");
+    showToast(
+      "Description draft ready",
+      `${payload.product_title || "Product"} now has a polished short description draft.`,
+      "success"
+    );
+  } catch (error) {
+    productDescriptionState = {
+      productId,
+      loading: false,
+      description: "",
+      notes: [],
+      error: error.message || "The description draft could not be generated just now.",
+    };
+    setStatus(productDescriptionState.error, "error");
+    showToast("Description draft failed", productDescriptionState.error, "error");
+  }
+
+  renderSection();
+}
+
 async function syncCatalog() {
   const storeName =
     (workspace && workspace.profile && workspace.profile.brand_name) ||
@@ -3526,6 +3825,11 @@ mainContent.addEventListener("click", (event) => {
 
   if (trigger.dataset.action === "sync-inline-catalog") {
     syncCatalog();
+    return;
+  }
+
+  if (trigger.dataset.action === "generate-product-description") {
+    generateProductDescription(trigger.dataset.productId || "");
     return;
   }
 

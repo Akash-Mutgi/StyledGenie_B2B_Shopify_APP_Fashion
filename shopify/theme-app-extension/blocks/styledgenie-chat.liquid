@@ -1,7 +1,7 @@
 {% assign api_base_url = block.settings.api_base_url | default: 'http://127.0.0.1:8000' %}
 
 {{ 'chat-widget.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'chat-widget.js' | asset_url }}" defer></script>
+<script src="{{ 'chat-widget-v2.js' | asset_url }}" defer></script>
 
 <div
   id="styledgenie-chat-root"

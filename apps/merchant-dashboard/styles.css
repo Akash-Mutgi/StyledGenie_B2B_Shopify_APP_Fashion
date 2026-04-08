@@ -1080,6 +1080,11 @@ textarea {
   min-width: 0;
 }
 
+.active-description-product {
+  border-color: #cbb398;
+  background: #fffaf4;
+}
+
 .settings-product-lockup {
   display: flex;
   align-items: center;
@@ -1114,6 +1119,57 @@ textarea {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
+}
+
+.description-studio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+}
+
+.description-action-stack {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.description-preview-shell {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: #fbf7f0;
+  display: grid;
+  gap: 16px;
+}
+
+.description-output-card {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.description-output-copy {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.65;
+  font-size: 1rem;
+}
+
+.description-note-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.description-note-list p {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f6f1e9;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .category-readiness-meter {
@@ -2072,7 +2128,8 @@ textarea {
 @media (max-width: 1280px) {
   .panel-grid-overview,
   .chatbot-customizer-grid,
-  .builder-control-grid {
+  .builder-control-grid,
+  .description-studio-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2101,6 +2158,7 @@ textarea {
   .panel-grid-overview,
   .two-column,
   .chatbot-customizer-grid,
+  .description-studio-grid,
   .analytics-metric-strip,
   .analytics-grid,
   .builder-grid,
@@ -2226,6 +2284,10 @@ textarea {
   .builder-preview-product {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .description-action-stack {
+    justify-items: start;
   }
 
   .catalog-product-row {

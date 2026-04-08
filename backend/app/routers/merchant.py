@@ -8,13 +8,17 @@ from app.models.schemas import (
     LookManagementPayload,
     MerchantStoreProfile,
     MerchantWorkspaceSnapshot,
+    ProductDescriptionRequest,
+    ProductDescriptionResponse,
     SaveResponse,
 )
+from app.services.openai_service import OpenAIService
 from app.services.supabase_service import SupabaseService
 
 
 router = APIRouter(tags=["merchant"])
 supabase_service = SupabaseService()
+openai_service = OpenAIService()
 
 
 @router.get("/api/merchant/workspace", response_model=MerchantWorkspaceSnapshot)
@@ -68,3 +72,18 @@ def update_knowledge_base(payload: KnowledgeBasePayload) -> SaveResponse:
         raise HTTPException(status_code=500, detail="Could not save knowledge and AI training.")
 
     return SaveResponse(message="Knowledge and AI training saved.")
+
+
+@router.post("/api/merchant/product-description", response_model=ProductDescriptionResponse)
+def generate_product_description(payload: ProductDescriptionRequest) -> ProductDescriptionResponse:
+    product = supabase_service.fetch_catalog_product(payload.product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found in the synced catalog.")
+
+    short_description, merchandising_notes = openai_service.generate_product_description(product)
+    return ProductDescriptionResponse(
+        product_id=payload.product_id,
+        product_title=product.get("title") or "Untitled product",
+        short_description=short_description,
+        merchandising_notes=merchandising_notes,
+    )

@@ -13,17 +13,66 @@ class ProductRecommendation(BaseModel):
     price: Optional[str] = None
     product_url: Optional[str] = None
     cart_variant_id: Optional[str] = None
+    slot: Optional[str] = None
+    slot_label: Optional[str] = None
+    is_primary: bool = False
+
+
+class ActionChip(BaseModel):
+    key: str
+    label: str
+    action_type: str = "refine"
+    value: Optional[str] = None
+
+
+class VisualSummary(BaseModel):
+    styling_mode: Optional[str] = None
+    anchor_item: Optional[str] = None
+    hero_item: Optional[str] = None
+    garment_type: Optional[str] = None
+    color_palette: list[str] = Field(default_factory=list)
+    silhouette_cues: list[str] = Field(default_factory=list)
+    framing: Optional[str] = None
+    style_direction: Optional[str] = None
+    visible_items: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    issue_type: Optional[str] = None
+
+
+class GapAnalysis(BaseModel):
+    present: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    recommended_focus: list[str] = Field(default_factory=list)
+    anchor_category: Optional[str] = None
+
+
+class ValidationResult(BaseModel):
+    status: str = "pass"
+    checks: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     mode: str = "outfit_curation"
     customer_id: Optional[str] = None
+    decision_preference: Optional[str] = None
+    swap_category: Optional[str] = None
+    locked_product_ids: list[str] = Field(default_factory=list)
+    excluded_product_ids: list[str] = Field(default_factory=list)
+    image_name: Optional[str] = None
+    image_base64: Optional[str] = None
 
 
 class ImageRequest(BaseModel):
     image_name: str = Field(min_length=1)
     customer_id: Optional[str] = None
+    shopper_note: Optional[str] = None
+    image_base64: Optional[str] = None
+    decision_preference: Optional[str] = None
+    swap_category: Optional[str] = None
+    locked_product_ids: list[str] = Field(default_factory=list)
+    excluded_product_ids: list[str] = Field(default_factory=list)
 
 
 class FeedbackRequest(BaseModel):
@@ -41,9 +90,31 @@ class StylingInsight(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    mode: str = "outfit_curation"
+    support_mode: bool = False
+    detected_intent: Optional[str] = None
+    clarification_needed: bool = False
+    follow_up_question: Optional[str] = None
     recommended_products: list[ProductRecommendation] = Field(default_factory=list)
     detected_tags: list[str] = Field(default_factory=list)
     styling_insights: list[StylingInsight] = Field(default_factory=list)
+    decision_prompt: Optional[str] = None
+    decision_options: list[ActionChip] = Field(default_factory=list)
+    refinement_actions: list[ActionChip] = Field(default_factory=list)
+    swap_actions: list[ActionChip] = Field(default_factory=list)
+    support_actions: list[ActionChip] = Field(default_factory=list)
+    visual_summary: Optional[VisualSummary] = None
+    gap_analysis: Optional[GapAnalysis] = None
+    hero_product: Optional[ProductRecommendation] = None
+    supporting_items: list[ProductRecommendation] = Field(default_factory=list)
+    validation: ValidationResult = Field(default_factory=ValidationResult)
+
+
+class SupportIntentResponse(BaseModel):
+    intent: str
+    reply: str
+    actions: list[ActionChip] = Field(default_factory=list)
+    follow_up_question: Optional[str] = None
 
 
 class FAQItem(BaseModel):
@@ -79,6 +150,7 @@ class DashboardActivityItem(BaseModel):
 
 
 class DashboardProductItem(BaseModel):
+    id: Optional[str] = None
     title: str
     category: str
     price: Optional[str] = None
@@ -173,6 +245,12 @@ class ChatbotCustomization(BaseModel):
     accent_text_style: str = "500 Medium"
     body_text_style: str = "400 Regular"
     target_market: str = "Europe"
+    recommendation_strictness: str = "balanced"
+    auto_apply_product_intelligence: str = "review_first"
+    product_prioritization: str = "best_match"
+    support_routing_email: str = ""
+    strict_mode_handling: str = "repair_then_retry"
+    decision_mode_default: str = "offer_choice"
     suggested_prompts: list[str] = Field(
         default_factory=lambda: [
             "Style me for a smart casual dinner.",
@@ -247,3 +325,18 @@ class CatalogImportResponse(BaseModel):
     imported_count: int
     orders_imported: int = 0
     orders_scope_ready: bool = False
+
+
+class ProductDescriptionRequest(BaseModel):
+    product_id: str = Field(min_length=1)
+
+
+class ProductDescriptionResponse(BaseModel):
+    product_id: str
+    product_title: str
+    short_description: str
+    merchandising_notes: list[str] = Field(default_factory=list)
+
+
+class ProductDescriptionRequest(BaseModel):
+    product_id: str = Field(min_length=1)

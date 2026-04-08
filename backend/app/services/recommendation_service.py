@@ -29,7 +29,32 @@ class RecommendationService:
     def _query_bucket(self, terms: set[str]) -> str:
         return self.catalog_intelligence_service.query_bucket(terms)
 
-    def _score_product(self, product: dict, terms: set[str], complementary: bool) -> dict:
+    def normalize_bucket(self, value: Optional[str]) -> str:
+        direct = (value or "").strip().lower()
+        if direct in self.catalog_intelligence_service.compatibility_map:
+            return direct
+        tokens = self._tokenize(value or "")
+        return self._query_bucket(tokens) if tokens else "general"
+
+    def bucket_label(self, bucket: str) -> str:
+        labels = {
+            "tops": "Top",
+            "bottoms": "Trousers",
+            "footwear": "Shoes",
+            "outerwear": "Layer",
+            "dresswear": "Dress",
+            "accessories": "Accessories",
+            "general": "Style Piece",
+        }
+        return labels.get(bucket, "Style Piece")
+
+    def _score_product(
+        self,
+        product: dict,
+        terms: set[str],
+        complementary: bool,
+        prioritization: str,
+    ) -> dict:
         title_tokens = self._tokenize(product.get("title", ""))
         category_tokens = self._tokenize(product.get("category", ""))
         description_tokens = self._tokenize(product.get("description", ""))
@@ -65,6 +90,8 @@ class RecommendationService:
         else:
             if bucket != "general":
                 style_bonus += 1
+
+        style_bonus += self._prioritization_bonus(product, prioritization)
 
         return {
             **product,
@@ -121,12 +148,28 @@ class RecommendationService:
         terms: list[str],
         complementary: bool = False,
         limit: int = 3,
+        exclude_product_ids: Optional[list[str]] = None,
+        required_bucket: Optional[str] = None,
+        prioritization: str = "best_match",
+        strict_bucket: bool = False,
     ) -> list[ProductRecommendation]:
         catalog = self._catalog()
         normalized_terms = self._expand_terms(terms)
         query_bucket = self._query_bucket(normalized_terms)
+        excluded = {item for item in (exclude_product_ids or []) if item}
+        normalized_required_bucket = self.normalize_bucket(required_bucket)
 
-        scored_products = [self._score_product(product, normalized_terms, complementary) for product in catalog]
+        filtered_catalog = [product for product in catalog if product.get("id") not in excluded]
+        scored_products = [
+            self._score_product(product, normalized_terms, complementary, prioritization)
+            for product in filtered_catalog
+            if normalized_required_bucket == "general" or self._product_bucket(product) == normalized_required_bucket
+        ]
+        if not scored_products and normalized_required_bucket != "general" and not strict_bucket:
+            scored_products = [
+                self._score_product(product, normalized_terms, complementary, prioritization)
+                for product in filtered_catalog
+            ]
         scored_products.sort(key=lambda item: item["score"], reverse=True)
 
         if not scored_products:
@@ -136,23 +179,100 @@ class RecommendationService:
         selected = self._enrich_selected_products(selected)
         reason_prefix = "Complements the requested look" if complementary else "Matches the shopper request"
 
-        return [
-            ProductRecommendation(
-                id=item["id"],
-                title=item["title"],
-                category=item["category"],
-                reason=self._build_reason(item, reason_prefix),
-                tags=item.get("tags", []),
-                image_url=item.get("image_url"),
-                price=self._price_text(item.get("price")),
-                product_url=self._product_url(item),
-                cart_variant_id=item.get("shopify_variant_id") or None,
+        return [self._to_recommendation(item, reason_prefix) for item in selected]
+
+    def recommend_for_bucket(
+        self,
+        terms: list[str],
+        bucket: str,
+        limit: int = 1,
+        exclude_product_ids: Optional[list[str]] = None,
+        prioritization: str = "best_match",
+        complementary: bool = False,
+        strict_bucket: bool = False,
+    ) -> list[ProductRecommendation]:
+        normalized_bucket = self.normalize_bucket(bucket)
+        products = self.recommend_products(
+            terms=terms,
+            complementary=complementary,
+            limit=max(1, limit),
+            exclude_product_ids=exclude_product_ids,
+            required_bucket=normalized_bucket,
+            prioritization=prioritization,
+            strict_bucket=strict_bucket,
+        )
+
+        normalized = []
+        for item in products:
+            normalized.append(
+                item.model_copy(
+                    update={
+                        "slot": normalized_bucket,
+                        "slot_label": self.bucket_label(normalized_bucket),
+                    }
+                )
             )
-            for item in selected
-        ]
+        return normalized[:limit]
+
+    def recommend_products_for_buckets(
+        self,
+        terms: list[str],
+        buckets: list[str],
+        exclude_product_ids: Optional[list[str]] = None,
+        prioritization: str = "best_match",
+        complementary: bool = False,
+        strict_bucket: bool = False,
+    ) -> list[ProductRecommendation]:
+        selected: list[ProductRecommendation] = []
+        excluded = list(exclude_product_ids or [])
+
+        for bucket in buckets:
+            bucket_matches = self.recommend_for_bucket(
+                terms=terms + [bucket],
+                bucket=bucket,
+                limit=1,
+                exclude_product_ids=excluded,
+                prioritization=prioritization,
+                complementary=complementary,
+                strict_bucket=strict_bucket,
+            )
+            if not bucket_matches:
+                continue
+
+            selected.extend(bucket_matches)
+            excluded.extend([item.id for item in bucket_matches])
+
+        return selected
+
+    def fetch_products_by_ids(self, product_ids: list[str]) -> list[ProductRecommendation]:
+        if not product_ids:
+            return []
+
+        catalog_map = {item.get("id"): item for item in self._catalog() if item.get("id")}
+        selected = []
+        for product_id in product_ids:
+            item = catalog_map.get(product_id)
+            if not item:
+                continue
+            bucket = self._product_bucket(item)
+            selected.append(
+                self._to_recommendation(
+                    item,
+                    "Selected from the live catalog",
+                    slot=bucket,
+                    slot_label=self.bucket_label(bucket),
+                )
+            )
+        return selected
+
+    def get_catalog_product(self, product_id: str) -> Optional[dict]:
+        for item in self._catalog():
+            if item.get("id") == product_id:
+                return item
+        return None
 
     def _build_reason(self, item: dict, reason_prefix: str) -> str:
-        clean_terms = self.catalog_intelligence_service.clean_match_terms(set(item["matched_terms"]))
+        clean_terms = self.catalog_intelligence_service.clean_match_terms(set(item.get("matched_terms", [])))
         if clean_terms:
             return f"{reason_prefix} through {', '.join(clean_terms[:3])}."
 
@@ -175,6 +295,59 @@ class RecommendationService:
             return str(item["product_url"])
 
         return None
+
+    def _to_recommendation(
+        self,
+        item: dict,
+        reason_prefix: str,
+        slot: Optional[str] = None,
+        slot_label: Optional[str] = None,
+        is_primary: bool = False,
+    ) -> ProductRecommendation:
+        return ProductRecommendation(
+            id=item["id"],
+            title=item["title"],
+            category=item["category"],
+            reason=self._build_reason(item, reason_prefix),
+            tags=item.get("tags", []),
+            image_url=item.get("image_url"),
+            price=self._price_text(item.get("price")),
+            product_url=self._product_url(item),
+            cart_variant_id=item.get("shopify_variant_id") or None,
+            slot=slot,
+            slot_label=slot_label,
+            is_primary=is_primary,
+        )
+
+    def _prioritization_bonus(self, product: dict, prioritization: str) -> int:
+        price = self._price_amount(product.get("price"))
+        if prioritization == "more_premium":
+            if price >= 250:
+                return 3
+            if price >= 140:
+                return 2
+            if price >= 80:
+                return 1
+            return 0
+
+        if prioritization == "more_accessible":
+            if price and price <= 80:
+                return 3
+            if price and price <= 140:
+                return 2
+            if price and price <= 220:
+                return 1
+            return 0
+
+        return 0
+
+    def _price_amount(self, price: object) -> float:
+        if price in (None, ""):
+            return 0.0
+        try:
+            return float(price)
+        except (TypeError, ValueError):
+            return 0.0
 
     def _enrich_selected_products(self, selected: list[dict]) -> list[dict]:
         missing_ids = [
