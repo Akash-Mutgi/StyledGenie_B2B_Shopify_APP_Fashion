@@ -40,14 +40,25 @@
         <div id="chatLog" class="chat-log"></div>
 
         <div class="upload-card">
-          <label for="imageInput">Optional image upload</label>
-          <input id="imageInput" type="file" accept="image/*" />
-          <p class="helper-text">
-            Use this for inspiration images or outfit photos in a future backend-connected version.
-          </p>
+          <div class="upload-toolbar">
+            <label class="upload-trigger" for="imageInput">
+              <span class="upload-trigger-plus">+</span>
+              <span>
+                <strong>Add photo</strong>
+                <small>Camera or upload</small>
+              </span>
+            </label>
+            <p class="helper-text">
+              Use this for inspiration images or outfit photos and then tap Analyze now.
+            </p>
+          </div>
+          <input id="imageInput" class="upload-input" type="file" accept="image/*" capture="environment" />
         </div>
 
         <form id="chatForm" class="chat-form">
+          <button type="button" class="icon-button" id="voiceInputButton" aria-label="Use voice input">
+            <span aria-hidden="true">🎤</span>
+          </button>
           <input
             id="chatInput"
             type="text"
@@ -58,6 +69,6 @@
       </section>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="./app-v2.js"></script>
   </body>
   </html>

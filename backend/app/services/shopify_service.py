@@ -290,6 +290,84 @@ class ShopifyService:
 
         return collected_orders
 
+    def fetch_order_status(
+        self,
+        order_reference: Optional[str] = None,
+        customer_email: Optional[str] = None,
+    ) -> Optional[dict]:
+        filters = []
+        normalized_reference = self._normalize_order_reference(order_reference)
+        normalized_email = (customer_email or "").strip().lower()
+
+        if normalized_reference:
+            filters.append(f"name:{normalized_reference}")
+        if normalized_email:
+            filters.append(f"email:{normalized_email}")
+        if not filters:
+            return None
+
+        query = """
+        query OrderLookup($query: String!) {
+          orders(first: 5, reverse: true, query: $query) {
+            nodes {
+              id
+              name
+              createdAt
+              updatedAt
+              displayFinancialStatus
+              displayFulfillmentStatus
+              statusPageUrl
+              currentTotalPriceSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              customer {
+                email
+              }
+              lineItems(first: 10) {
+                nodes {
+                  title
+                  quantity
+                }
+              }
+            }
+          }
+        }
+        """
+
+        response = self.graphql(query, {"query": " AND ".join(filters)})
+        nodes = (response.get("data") or {}).get("orders", {}).get("nodes", []) or []
+        for node in nodes:
+            node_name = self._normalize_order_reference(node.get("name"))
+            node_email = (((node.get("customer") or {}).get("email")) or "").strip().lower()
+            if normalized_reference and node_name != normalized_reference:
+                continue
+            if normalized_email and node_email and node_email != normalized_email:
+                continue
+            return {
+                "order_name": node.get("name"),
+                "customer_email": node_email or None,
+                "ordered_at": node.get("createdAt"),
+                "updated_at": node.get("updatedAt"),
+                "fulfillment_status": node.get("displayFulfillmentStatus"),
+                "financial_status": node.get("displayFinancialStatus"),
+                "status_page_url": node.get("statusPageUrl"),
+                "total_price": ((node.get("currentTotalPriceSet") or {}).get("shopMoney") or {}).get("amount"),
+                "currency_code": ((node.get("currentTotalPriceSet") or {}).get("shopMoney") or {}).get(
+                    "currencyCode"
+                ),
+                "line_items": [
+                    {
+                        "title": item.get("title") or "Untitled item",
+                        "quantity": int(item.get("quantity") or 1),
+                    }
+                    for item in ((node.get("lineItems") or {}).get("nodes") or [])
+                ],
+            }
+        return None
+
     def _parse_order_node(self, node: dict[str, Any]) -> Optional[dict]:
         order_id = node.get("id")
         if not order_id:
@@ -444,6 +522,15 @@ class ShopifyService:
         self._cached_token = access_token
         self._cached_token_expires_at = time.time() + int(expires_in or 0)
         return access_token
+
+    def _normalize_order_reference(self, order_reference: Optional[str]) -> Optional[str]:
+        if not order_reference:
+            return None
+        digits = "".join(character for character in str(order_reference) if character.isdigit())
+        if digits:
+            return f"#{digits}"
+        cleaned = str(order_reference).strip()
+        return cleaned or None
 
     def _build_token_error_message(self, status_code: int, details: str) -> str:
         compact_details = " ".join((details or "").split())

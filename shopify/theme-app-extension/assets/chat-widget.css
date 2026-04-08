@@ -411,6 +411,19 @@
   opacity: 0.6;
 }
 
+.styledgenie-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #decfbf;
+  border-radius: 12px;
+  background: white;
+  color: #2e241d;
+  cursor: pointer;
+}
+
 .styledgenie-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -441,17 +454,194 @@
   font-size: 0.92rem;
 }
 
+.styledgenie-upload-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.styledgenie-upload-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.styledgenie-upload-trigger strong,
+.styledgenie-upload-trigger small {
+  display: block;
+}
+
+.styledgenie-upload-trigger small,
+.styledgenie-upload-copy {
+  color: #6f5f54;
+}
+
+.styledgenie-upload-copy {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.styledgenie-upload-plus {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #2e241d;
+  color: white;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
 .styledgenie-upload.hidden {
   display: none;
 }
 
-.styledgenie-upload input {
+.styledgenie-upload-input {
   width: 100%;
+}
+
+.styledgenie-image-preview-card {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid #decfbf;
+  background: #fffaf5;
+}
+
+.styledgenie-image-preview-card img {
+  display: block;
+  width: 100%;
+  max-height: 230px;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+
+.styledgenie-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.styledgenie-preview-title {
+  margin: 0 0 4px;
+  font-weight: 800;
+}
+
+.styledgenie-preview-copy {
+  margin: 0;
+  color: #6f5f54;
+  line-height: 1.4;
+}
+
+.styledgenie-analysis-panel,
+.styledgenie-support-panel,
+.styledgenie-hero-panel,
+.styledgenie-decision-panel {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid #e5d6c7;
+  background: #fffaf5;
+}
+
+.styledgenie-decision-panel {
+  background:
+    radial-gradient(circle at top right, rgba(255, 232, 216, 0.95), transparent 35%),
+    linear-gradient(180deg, #fff6ef 0%, #f8ede2 100%);
+}
+
+.styledgenie-support-panel-title,
+.styledgenie-hero-panel-title,
+.styledgenie-decision-heading {
+  margin: 0 0 10px;
+  color: #7b6a5f;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
+.styledgenie-analysis-note,
+.styledgenie-support-copy {
+  margin: 0 0 10px;
+  color: #6f5f54;
+  line-height: 1.45;
+}
+
+.styledgenie-analysis-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.styledgenie-analysis-card {
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid #eadfd3;
+  background: white;
+}
+
+.styledgenie-analysis-card h4 {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+}
+
+.styledgenie-analysis-list,
+.styledgenie-analysis-inline-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #6f5f54;
+  line-height: 1.45;
+}
+
+.styledgenie-analysis-inline-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.styledgenie-analysis-inline-list li + li {
+  margin-top: 4px;
+}
+
+.styledgenie-action-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.styledgenie-action-chip {
+  border: 1px solid #dfc7b3;
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: white;
+  color: #2e241d;
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 0.82rem;
+}
+
+.styledgenie-supporting-strip {
+  display: grid;
+  gap: 8px;
+}
+
+.styledgenie-supporting-strip .styledgenie-card {
+  grid-template-columns: 64px 1fr;
+}
+
+.styledgenie-supporting-strip .styledgenie-card-media {
+  width: 64px;
+  height: 84px;
 }
 
 .styledgenie-form {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 8px;
 }
 
@@ -480,6 +670,16 @@
 }
 
 @media (max-width: 520px) {
+  .styledgenie-upload-toolbar,
+  .styledgenie-preview-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .styledgenie-form {
+    grid-template-columns: 1fr;
+  }
+
   .styledgenie-card {
     grid-template-columns: 1fr;
   }
