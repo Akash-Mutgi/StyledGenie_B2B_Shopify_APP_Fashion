@@ -1,0 +1,8 @@
+{
+  "name": "StyledGenie Chat",
+  "settings": {
+    "api_base_url": {
+      "label": "Backend API Base URL"
+    }
+  }
+}

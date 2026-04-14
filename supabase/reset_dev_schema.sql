@@ -5,7 +5,7 @@ drop table if exists knowledge_base_entries cascade;
 drop table if exists faqs cascade;
 drop table if exists curated_look_items cascade;
 drop table if exists curated_looks cascade;
+drop table if exists customer_style_profiles cascade;
 drop table if exists product_tags cascade;
 drop table if exists products cascade;
 drop table if exists merchants cascade;
-

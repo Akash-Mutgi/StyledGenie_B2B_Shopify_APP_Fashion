@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StyledGenie Merchant Dashboard</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260413a" />
   </head>
   <body>
     <div class="workspace-shell">
@@ -24,6 +24,7 @@
 
         <nav class="nav-list" aria-label="Merchant dashboard navigation">
           <button class="nav-button active" data-section="overview">Dashboard Overview</button>
+          <button class="nav-button" data-section="my-style">My Style</button>
           <button class="nav-button" data-section="chatbot">Chatbot Customization</button>
           <button class="nav-button" data-section="catalog">Catalog Intelligence</button>
           <button class="nav-button" data-section="looks">Look Management</button>
@@ -49,7 +50,7 @@
 
           <div class="topbar-actions">
             <p class="status-pill" id="saveStatus">Loading workspace...</p>
-            <button class="primary-button" id="syncCatalogButton">Sync Catalog</button>
+            <button class="primary-button" id="syncCatalogButton" type="button">Sync Catalog</button>
           </div>
         </header>
 
@@ -68,6 +69,7 @@
       </button>
     </div>
 
-    <script src="./app.js"></script>
+    <script src="./my-style-utils.js?v=20260413a"></script>
+    <script src="./app.js?v=20260413a"></script>
   </body>
 </html>

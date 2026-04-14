@@ -1,0 +1,17 @@
+{
+  "tone": [
+    "warm",
+    "polished",
+    "empathetic"
+  ],
+  "use_headers": true,
+  "use_lists": true,
+  "use_emojis": false,
+  "emoji_intensity": "none",
+  "response_length": "concise",
+  "custom_instructions": "",
+  "target_market": null,
+  "brand_description": null,
+  "avoid_phrases": null,
+  "preferred_greeting_style": null
+}
