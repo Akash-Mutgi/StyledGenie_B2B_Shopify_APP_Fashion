@@ -1,0 +1,10 @@
+{
+  "name": "styledgenie-my-style-extension",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@preact/signals": "^2.9.0",
+    "@shopify/ui-extensions": "latest",
+    "preact": "latest"
+  }
+}

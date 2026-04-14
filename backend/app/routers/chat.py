@@ -1,116 +1,59 @@
 from fastapi import APIRouter, HTTPException
 
-from app.models.schemas import ChatRequest, ChatResponse, FeedbackRequest, ImageRequest, SaveResponse
-from app.services.faq_service import FAQService
-from app.services.openai_service import OpenAIService
-from app.services.recommendation_service import RecommendationService
+from app.models.schemas import (
+    ChatInitRequest,
+    ChatInitResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatSelectProfileRequest,
+    ChatSelectProfileResponse,
+    ChatSelectServiceRequest,
+    ChatSelectServiceResponse,
+    FeedbackRequest,
+    ImageRequest,
+    RecommendationRefineRequest,
+    SaveResponse,
+)
+from app.services.conversation_service import ConversationService
 from app.services.supabase_service import SupabaseService
-from app.services.vision_service import VisionService
 
 
 router = APIRouter(tags=["chat"])
-openai_service = OpenAIService()
-vision_service = VisionService()
-recommendation_service = RecommendationService()
-faq_service = FAQService()
+conversation_service = ConversationService()
 supabase_service = SupabaseService()
 
 
 @router.post("/api/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest) -> ChatResponse:
-    session_id = supabase_service.ensure_chat_session(payload.customer_id)
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="customer",
-        message=payload.message,
-        mode=payload.mode,
-    )
+    return conversation_service.handle_text_chat(payload)
 
-    if payload.mode == "support":
-        reply = faq_service.answer_question(payload.message)
-        supabase_service.log_recommendation_event(
-            event_type="support_question",
-            input_summary=payload.message,
-            recommended_product_ids=[],
-            session_id=session_id,
-        )
-        supabase_service.log_chat_message(
-            session_id=session_id,
-            sender="assistant",
-            message=reply,
-            mode=payload.mode,
-        )
-        return ChatResponse(
-            reply=reply,
-            recommended_products=[],
-            styling_insights=[],
-        )
 
-    keywords = [word.strip(".,!?").lower() for word in payload.message.split() if len(word) > 3]
-    candidate_products = recommendation_service.recommend_products(keywords, limit=8)
-    reply, recommendations, styling_insights = openai_service.style_recommendations(
-        mode=payload.mode,
-        shopper_message=payload.message,
-        detected_tags=[],
-        candidate_products=candidate_products,
-    )
-    supabase_service.log_recommendation_event(
-        event_type=payload.mode,
-        input_summary=payload.message,
-        recommended_product_ids=[item.id for item in recommendations],
-        session_id=session_id,
-    )
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="assistant",
-        message=reply,
-        mode=payload.mode,
-    )
-    return ChatResponse(
-        reply=reply,
-        recommended_products=recommendations,
-        styling_insights=styling_insights,
-    )
+@router.post("/api/chat/init", response_model=ChatInitResponse)
+def initialize_chat(payload: ChatInitRequest) -> ChatInitResponse:
+    return conversation_service.initialize_chat(payload)
+
+
+@router.post("/api/chat/select-profile", response_model=ChatSelectProfileResponse)
+def select_profile(payload: ChatSelectProfileRequest) -> ChatSelectProfileResponse:
+    try:
+        return conversation_service.select_active_profile(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/api/chat/select-service", response_model=ChatSelectServiceResponse)
+def select_service(payload: ChatSelectServiceRequest) -> ChatSelectServiceResponse:
+    return conversation_service.select_service(payload)
 
 
 @router.post("/api/inspire", response_model=ChatResponse)
 def inspire(payload: ImageRequest) -> ChatResponse:
-    session_id = supabase_service.ensure_chat_session(payload.customer_id)
-    shopper_message = f"Get inspired image uploaded: {payload.image_name}"
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="customer",
-        message=shopper_message,
-        mode="get_inspired",
-    )
+    return conversation_service.handle_image_chat(payload, "get_inspired")
 
-    detected_tags = vision_service.detect_fashion_elements(payload.image_name)
-    candidate_products = recommendation_service.recommend_products(detected_tags, limit=8)
-    reply, recommendations, styling_insights = openai_service.style_recommendations(
-        mode="get_inspired",
-        shopper_message="Image-based inspiration request",
-        detected_tags=detected_tags,
-        candidate_products=candidate_products,
-    )
-    recommended_product_ids = [item.id for item in recommendations]
-    supabase_service.log_recommendation_event(
-        event_type="get_inspired",
-        input_summary=payload.image_name,
-        recommended_product_ids=recommended_product_ids,
-        session_id=session_id,
-    )
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="assistant",
-        message=reply,
-        mode="get_inspired",
-    )
-    return ChatResponse(
-        reply=reply,
-        detected_tags=detected_tags,
-        recommended_products=recommendations,
-        styling_insights=styling_insights,
-    )
+
+@router.post("/api/support-image", response_model=ChatResponse)
+def support_image(payload: ImageRequest) -> ChatResponse:
+    return conversation_service.handle_support_image(payload)
 
 
 @router.post("/api/feedback", response_model=SaveResponse)
@@ -129,41 +72,11 @@ def save_feedback(payload: FeedbackRequest) -> SaveResponse:
     return SaveResponse(message="Feedback saved.")
 
 
+@router.post("/api/chat/refine", response_model=ChatResponse)
+def refine_chat(payload: RecommendationRefineRequest) -> ChatResponse:
+    return conversation_service.refine_recommendations(payload)
+
+
 @router.post("/api/complete-look", response_model=ChatResponse)
 def complete_look(payload: ImageRequest) -> ChatResponse:
-    session_id = supabase_service.ensure_chat_session(payload.customer_id)
-    shopper_message = f"Complete the look image uploaded: {payload.image_name}"
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="customer",
-        message=shopper_message,
-        mode="complete_the_look",
-    )
-
-    detected_tags = vision_service.detect_fashion_elements(payload.image_name)
-    candidate_products = recommendation_service.recommend_products(detected_tags, complementary=True, limit=8)
-    reply, recommendations, styling_insights = openai_service.style_recommendations(
-        mode="complete_the_look",
-        shopper_message="Complete the look request",
-        detected_tags=detected_tags,
-        candidate_products=candidate_products,
-    )
-    recommended_product_ids = [item.id for item in recommendations]
-    supabase_service.log_recommendation_event(
-        event_type="complete_the_look",
-        input_summary=payload.image_name,
-        recommended_product_ids=recommended_product_ids,
-        session_id=session_id,
-    )
-    supabase_service.log_chat_message(
-        session_id=session_id,
-        sender="assistant",
-        message=reply,
-        mode="complete_the_look",
-    )
-    return ChatResponse(
-        reply=reply,
-        detected_tags=detected_tags,
-        recommended_products=recommendations,
-        styling_insights=styling_insights,
-    )
+    return conversation_service.handle_image_chat(payload, "complete_the_look")

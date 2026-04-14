@@ -37,7 +37,7 @@ Make sure your [`.env`](/Users/akashmutgi/Documents/StyledGenie_B2B_Shopify_APP_
 
 ```env
 SHOPIFY_APP_NAME=StyledGenieB2B_Test
-SHOPIFY_APP_URL=https://admin.shopify.com/store/ea4aad-0f/settings/domains/142453670222
+SHOPIFY_APP_URL=https://shopify.dev/apps/default-app-home
 SHOPIFY_STORE_DOMAIN=styledgenie-webshop.myshopify.com
 SHOPIFY_STOREFRONT_DOMAIN=styledgenie.com
 SHOPIFY_API_VERSION=2026-01

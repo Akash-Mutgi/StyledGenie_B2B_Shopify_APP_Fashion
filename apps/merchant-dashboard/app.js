@@ -10,13 +10,19 @@ const toastTitle = document.getElementById("toastTitle");
 const toastMessage = document.getElementById("toastMessage");
 const toastCloseButton = document.getElementById("toastCloseButton");
 const navButtons = Array.from(document.querySelectorAll(".nav-button"));
-const apiBaseUrl = "http://127.0.0.1:8000";
+const apiBaseUrl = resolveApiBaseUrl();
+const myStyleUtils = window.StyledGenieMyStyleUtils || {};
 
 const sectionMeta = {
   overview: {
     title: "Dashboard Overview",
     subtitle:
       "Monitor live AI performance, store readiness, and the merchant profile that powers every recommendation.",
+  },
+  "my-style": {
+    title: "My Style",
+    subtitle:
+      "Review the saved shopper style profiles that future styling conversations can use as reusable account-level context.",
   },
   chatbot: {
     title: "Chatbot Customizer",
@@ -68,18 +74,158 @@ const chatbotTargetMarkets = [
   "Global",
 ];
 
+const chatbotVoiceToneOptions = [
+  "warm",
+  "enthusiastic",
+  "polished",
+  "confident",
+  "empathetic",
+  "playful",
+  "minimal",
+  "luxurious",
+  "friendly",
+  "professional",
+];
+
+const chatbotVoiceEmojiIntensityOptions = ["none", "light", "moderate"];
+const chatbotVoiceResponseLengthOptions = ["concise", "balanced", "detailed"];
+
+const recommendationStrictnessOptions = [
+  "Balanced",
+  "Strict brand alignment",
+  "Higher conversion focus",
+  "More exploratory",
+];
+
+const taggingModeOptions = [
+  "Review only",
+  "Auto-apply safe fields",
+];
+
+const descriptionWriteModeOptions = [
+  "Review only",
+  "Auto-apply short description",
+];
+
 let workspace = null;
 let activeSection = "overview";
+let myStyleProfilesState = {
+  loading: false,
+  error: "",
+  profiles: [],
+  updatedAt: "",
+  loaded: false,
+};
+let activeMyStyleProfileId = "";
+let activeMyStyleAction = "";
 let activeChatbotPage = "settings";
 let toastTimer = null;
 let chatbotAutosaveTimer = null;
 let lastChatbotDraftFingerprint = "";
+let lastVoiceConfigDraftFingerprint = "";
 let lastWorkspaceSnapshotFingerprint = "";
 let workspaceHeartbeatTimer = null;
 const analyticsRefreshIntervalMs = 5000;
 let builderPreviewFlow = "outfit_curation";
 let builderPreviewPrompt = "";
 let builderPriorityFlow = "";
+let catalogProductOptions = [];
+let selectedDescriptionProductId = "";
+let productDescriptionDraft = null;
+let selectedLookBuilderHeroId = "";
+let lookBuilderOccasionHint = "";
+let shopifyCapabilities = {
+  write_products_ready: false,
+  granted_scopes: [],
+  message: "",
+  api_base_url: "",
+  setup_checks: [],
+};
+let catalogIntelligenceSuggestions = null;
+let catalogSuggestionsLoading = false;
+
+function resolveMerchantDashboardBasePath() {
+  const pathname = (window.location && window.location.pathname) || "/merchant-dashboard/";
+  if (!pathname) {
+    return "/merchant-dashboard/";
+  }
+  return pathname.endsWith("/") ? pathname : `${pathname}/`;
+}
+
+function sanitizeSection(section) {
+  return sectionMeta[section] ? section : "overview";
+}
+
+function waitForMs(durationMs) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, durationMs);
+  });
+}
+
+function readDashboardRouteState() {
+  const params = new URLSearchParams((window.location && window.location.search) || "");
+  return {
+    section: sanitizeSection(params.get("section") || "overview"),
+    profileId: String(params.get("profile") || "").trim(),
+    action: String(params.get("action") || "").trim(),
+  };
+}
+
+function syncDashboardRouteState(options = {}) {
+  if (!window.history || !window.location) {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("section", activeSection);
+
+  if (options.profileId || activeMyStyleProfileId) {
+    url.searchParams.set("profile", options.profileId || activeMyStyleProfileId);
+  } else {
+    url.searchParams.delete("profile");
+  }
+
+  if (options.action || activeMyStyleAction) {
+    url.searchParams.set("action", options.action || activeMyStyleAction);
+  } else {
+    url.searchParams.delete("action");
+  }
+
+  window.history.pushState({}, "", `${url.pathname}${url.search}`);
+}
+
+function applyDashboardRouteState(routeState) {
+  activeSection = sanitizeSection(routeState && routeState.section);
+  activeMyStyleProfileId = String((routeState && routeState.profileId) || "").trim();
+  activeMyStyleAction = String((routeState && routeState.action) || "").trim();
+}
+
+function stripTrailingSlash(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function resolveApiBaseUrl() {
+  const queryValue = new URLSearchParams(window.location.search).get("api_base");
+  const bodyValue = document.body ? document.body.dataset.apiBase : "";
+  const metaTag = document.querySelector('meta[name="styledgenie-api-base"]');
+  const metaValue = metaTag ? metaTag.content : "";
+  const globalValue =
+    typeof window.STYLEDGENIE_API_BASE === "string" ? window.STYLEDGENIE_API_BASE : "";
+
+  const configuredBase = [queryValue, bodyValue, metaValue, globalValue]
+    .map((value) => stripTrailingSlash(value))
+    .find(Boolean);
+
+  if (configuredBase) {
+    return configuredBase;
+  }
+
+  if (window.location && /^https?:/i.test(window.location.origin || "")) {
+    return stripTrailingSlash(window.location.origin);
+  }
+
+  return "http://127.0.0.1:8000";
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -88,6 +234,52 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function getFriendlyApplyErrorMessage(message) {
+  const normalized = String(message || "").toLowerCase();
+  if (normalized.includes("write_products")) {
+    return "Shopify has not approved product write access yet. Add `write_products` to the app version, release it, then update or reinstall the app on this store before applying descriptions.";
+  }
+
+  return message || "Please try again.";
+}
+
+function renderCatalogSuggestionButtons(fieldKey, fieldData) {
+  if (!fieldData || !Array.isArray(fieldData.options) || !fieldData.options.length) {
+    return '<p class="empty-copy">No suggestions generated yet.</p>';
+  }
+
+  return fieldData.options
+    .map(
+      (option) => `
+        <button
+          class="catalog-suggestion-chip"
+          type="button"
+          data-action="apply-catalog-suggestion"
+          data-field="${escapeHtml(fieldKey)}"
+          data-value="${escapeHtml(encodeURIComponent(option))}"
+        >
+          ${escapeHtml(option)}
+        </button>
+      `
+    )
+    .join("");
+}
+
+function renderCatalogSuggestionCard(fieldKey, title, fieldData) {
+  return `
+    <article class="catalog-suggestion-card">
+      <div class="catalog-suggestion-head">
+        <strong>${escapeHtml(title)}</strong>
+        <span class="inline-badge">Click to apply</span>
+      </div>
+      <p class="catalog-suggestion-helper">${escapeHtml((fieldData && fieldData.helper) || "")}</p>
+      <div class="catalog-suggestion-chip-row">
+        ${renderCatalogSuggestionButtons(fieldKey, fieldData)}
+      </div>
+    </article>
+  `;
 }
 
 function setStatus(text, tone = "neutral") {
@@ -238,7 +430,68 @@ function renderSelectOptions(options, selectedValue) {
     .join("");
 }
 
+function renderProductOptionTags(options, selectedValue, placeholder = "Select a product") {
+  const normalizedSelectedValue = String(selectedValue || "");
+  const optionMarkup = (options || [])
+    .map(
+      (item) => `
+        <option value="${escapeHtml(item.id)}"${item.id === normalizedSelectedValue ? " selected" : ""}>
+          ${escapeHtml(item.title)}${item.category ? ` · ${escapeHtml(item.category)}` : ""}
+        </option>
+      `
+    )
+    .join("");
+
+  return `
+    <option value="">${escapeHtml(placeholder)}</option>
+    ${optionMarkup}
+  `;
+}
+
+function renderVoiceToneChips(selectedTones) {
+  const selected = Array.isArray(selectedTones) ? selectedTones : [];
+  return chatbotVoiceToneOptions
+    .map(
+      (tone) => `
+        <label class="voice-chip${selected.includes(tone) ? " active" : ""}">
+          <input
+            class="voice-choice-input"
+            type="checkbox"
+            name="voice_tone"
+            value="${escapeHtml(tone)}"
+            ${selected.includes(tone) ? "checked" : ""}
+          />
+          <span>${escapeHtml(formatVoiceLabel(tone))}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function renderVoiceChoiceChips(name, options, selectedValue) {
+  return options
+    .map(
+      (option) => `
+        <label class="voice-chip${option === selectedValue ? " active" : ""}">
+          <input
+            class="voice-choice-input"
+            type="radio"
+            name="${escapeHtml(name)}"
+            value="${escapeHtml(option)}"
+            ${option === selectedValue ? "checked" : ""}
+          />
+          <span>${escapeHtml(formatVoiceLabel(option))}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
 function getChatbotFingerprint(payload) {
+  return JSON.stringify(payload || {});
+}
+
+function getVoiceConfigFingerprint(payload) {
   return JSON.stringify(payload || {});
 }
 
@@ -249,7 +502,135 @@ function getWorkspaceSnapshotFingerprint(snapshot) {
     recent_activity: snapshot && snapshot.recent_activity,
     recent_products: snapshot && snapshot.recent_products,
     chatbot_customization: snapshot && snapshot.chatbot_customization,
+    chatbot_voice_config: snapshot && snapshot.chatbot_voice_config,
   });
+}
+
+function getDefaultChatbotVoiceConfig() {
+  return {
+    tone: ["warm", "polished", "empathetic"],
+    use_headers: true,
+    use_lists: true,
+    use_emojis: false,
+    emoji_intensity: "none",
+    response_length: "balanced",
+    custom_instructions: "",
+    target_market: "",
+    brand_description: "",
+    avoid_phrases: "",
+    preferred_greeting_style: "",
+  };
+}
+
+function normalizeVoiceConfig(config) {
+  const defaults = getDefaultChatbotVoiceConfig();
+  const incoming = config || {};
+  const toneList = Array.isArray(incoming.tone)
+    ? incoming.tone
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter(Boolean)
+    : defaults.tone;
+  const tone = Array.from(new Set(toneList.length ? toneList : defaults.tone)).filter((item) =>
+    chatbotVoiceToneOptions.includes(item)
+  );
+  const useEmojis = Boolean(incoming.use_emojis);
+  const emojiIntensity = useEmojis
+    ? chatbotVoiceEmojiIntensityOptions.includes(String(incoming.emoji_intensity || "").toLowerCase())
+      ? String(incoming.emoji_intensity || "").toLowerCase()
+      : "light"
+    : "none";
+  const responseLength = chatbotVoiceResponseLengthOptions.includes(
+    String(incoming.response_length || "").toLowerCase()
+  )
+    ? String(incoming.response_length || "").toLowerCase()
+    : defaults.response_length;
+
+  return {
+    tone: tone.length ? tone : defaults.tone,
+    use_headers: incoming.use_headers !== false,
+    use_lists: incoming.use_lists !== false,
+    use_emojis: useEmojis,
+    emoji_intensity: emojiIntensity,
+    response_length: responseLength,
+    custom_instructions: String(incoming.custom_instructions || "").trim(),
+    target_market: String(incoming.target_market || "").trim(),
+    brand_description: String(incoming.brand_description || "").trim(),
+    avoid_phrases: String(incoming.avoid_phrases || "").trim(),
+    preferred_greeting_style: String(incoming.preferred_greeting_style || "").trim(),
+  };
+}
+
+function formatVoiceLabel(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized
+    .split(/[\s_-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function buildVoicePreviewMarkup(config) {
+  const normalized = normalizeVoiceConfig(config);
+  const emoji =
+    normalized.use_emojis && normalized.emoji_intensity === "moderate"
+      ? " ✨"
+      : normalized.use_emojis && normalized.emoji_intensity === "light"
+      ? " ✦"
+      : "";
+  const intro = normalized.preferred_greeting_style
+    ? `${escapeHtml(normalized.preferred_greeting_style)}${emoji}`
+    : `Here’s how your stylist would answer a shopper${emoji}`;
+  const toneSummary = escapeHtml(normalized.tone.map(formatVoiceLabel).join(", "));
+  const marketSummary = escapeHtml(normalized.target_market || "global fashion shoppers");
+  const brandSummary = escapeHtml(
+    normalized.brand_description || "premium styling guidance for connected fashion shoppers"
+  );
+  const customNote = normalized.custom_instructions
+    ? `<p class="voice-preview-note">${escapeHtml(normalized.custom_instructions)}</p>`
+    : "";
+  const opening =
+    normalized.response_length === "concise"
+      ? `I’d keep this polished and easy to act on${emoji}.`
+      : normalized.response_length === "detailed"
+      ? `I’d answer with a warmer, more guided stylist tone${emoji}, while still keeping the decision clear.`
+      : `I’d answer like a confident stylist who is polished, helpful, and easy to trust${emoji}.`;
+  const listBody = `
+    <ul class="voice-preview-list">
+      <li>Voice: ${toneSummary}</li>
+      <li>Format: ${escapeHtml(
+        `${normalized.use_headers ? "Headers on" : "Headers off"} · ${normalized.use_lists ? "Lists on" : "Lists off"} · ${formatVoiceLabel(normalized.response_length)} length`
+      )}</li>
+      <li>Framing: shaped for ${marketSummary}</li>
+    </ul>
+  `;
+  const proseBody = `<p class="voice-preview-copy">Voice: ${toneSummary}. The reply would stay ${
+    normalized.response_length
+  }, feel natural for ${marketSummary}, and present the decision in a clean, shopper-friendly way.</p>`;
+  const structuralLead = normalized.use_headers
+    ? '<strong class="voice-preview-section-title">Why this works</strong>'
+    : "";
+  const detail =
+    normalized.response_length === "detailed"
+      ? "I’d explain the outfit logic more clearly, connect it back to the shopper’s occasion, and keep the finish premium and reassuring."
+      : normalized.response_length === "concise"
+      ? "I’d keep the recommendation sharp, premium, and very easy to scan."
+      : "I’d keep the recommendation polished, useful, and easy to trust.";
+
+  return `
+    <p class="voice-preview-label">Sample shopper reply</p>
+    <div class="voice-preview-bubble-shell">
+      <p class="voice-preview-intro">${intro}</p>
+      <p class="voice-preview-copy">${opening}</p>
+      ${structuralLead}
+      ${normalized.use_lists ? listBody : proseBody}
+      <p class="voice-preview-copy">Brand framing: ${brandSummary}.</p>
+      <p class="voice-preview-copy">${escapeHtml(detail)}</p>
+      ${customNote}
+    </div>
+    <p class="voice-preview-meta">This preview updates live from the voice settings, not just the visual theme.</p>
+  `;
 }
 
 function formatDurationFromMinutes(minutes) {
@@ -578,14 +959,14 @@ function buildUsageShareRows(snapshot) {
 
 function buildIntentMix(snapshot) {
   const items = [
-    { label: "Inspiration", value: snapshot.overview.image_uploads, color: "#7adce3" },
-    { label: "Occasion Styling", value: snapshot.overview.outfit_recommendations, color: "#44b4d5" },
-    { label: "Compare Products", value: snapshot.overview.support_questions_answered, color: "#3d7bb5" },
-    { label: "Order Support", value: snapshot.chat_sessions, color: "#536d9a" },
+    { label: "Inspiration", value: snapshot.overview.image_uploads, color: "#1f1f1f" },
+    { label: "Occasion Styling", value: snapshot.overview.outfit_recommendations, color: "#4b4b4b" },
+    { label: "Compare Products", value: snapshot.overview.support_questions_answered, color: "#737373" },
+    { label: "Order Support", value: snapshot.chat_sessions, color: "#9a9a9a" },
     {
       label: "Returns & Logistics",
       value: Math.max(1, Math.round(snapshot.overview.support_questions_answered / 2)),
-      color: "#624b8d",
+      color: "#c2c2c2",
     },
   ];
 
@@ -1256,6 +1637,43 @@ function buildSettingsPulse(snapshot) {
   ];
 }
 
+function renderAiStackCard(aiStack) {
+  const status = aiStack || {};
+  const langchainState = status.langchain_ready ? "Active" : "Fallback";
+  const visionState = status.vision_ready ? "Active" : "Fallback";
+  const openaiState = status.openai_ready ? "Ready" : "Needs setup";
+
+  return `
+    <article class="workspace-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">AI Status</p>
+          <h3>AI Performance Overview</h3>
+          <p class="card-copy">${escapeHtml(
+            "Track whether the connected AI systems are ready to support styling, search, and customer care."
+          )}</p>
+        </div>
+        <span class="inline-badge">${status.langchain_ready ? "AI active" : "Fallback active"}</span>
+      </div>
+      <div class="detail-list">
+        <div class="detail-row"><span>Language intelligence</span><strong>${escapeHtml(openaiState)}</strong></div>
+        <div class="detail-row"><span>Recommendation routing</span><strong>${escapeHtml(
+          langchainState
+        )}</strong></div>
+        <div class="detail-row"><span>Commerce tools</span><strong>${escapeHtml(
+          status.langchain_tools_ready ? "Ready" : "Unavailable"
+        )}</strong></div>
+        <div class="detail-row"><span>Image understanding</span><strong>${escapeHtml(
+          visionState
+        )}</strong></div>
+        <div class="detail-row"><span>AI activity</span><strong>${escapeHtml(
+          status.image_reasoning_active ? "Active" : "Off"
+        )}</strong></div>
+      </div>
+    </article>
+  `;
+}
+
 function buildBuilderKpisAccurate(snapshot) {
   return [
     {
@@ -1468,7 +1886,7 @@ function renderChatbotAnalyticsPage(snapshot) {
         <div class="live-chip-row">
           <span class="status-chip neutral">${escapeHtml(snapshot.store_domain || "Store pending")}</span>
           <span class="status-chip neutral">${escapeHtml(
-            workspace.chatbot_customization.target_market || "Global"
+            (workspace.chatbot_voice_config && workspace.chatbot_voice_config.target_market) || "Global"
           )}</span>
           <span class="status-chip ${snapshot.orders_scope_ready ? "live" : "needs-setup"}">
             ${escapeHtml(snapshot.orders_scope_ready ? "Orders visible" : "Orders pending")}
@@ -1522,7 +1940,7 @@ function renderChatbotAnalyticsPage(snapshot) {
                               )
                             )
                           )
-                        )}%; background:#7adce3;"></div>
+                        )}%; background:#4a4a4a;"></div>
                       </div>
                       <strong>${escapeHtml(formatNumber(item.started))}</strong>
                     </div>
@@ -2090,6 +2508,7 @@ function renderBotBuilderPage(snapshot) {
 function renderOverviewSection() {
   const snapshot = workspace.overview;
   const profile = workspace.profile;
+  const aiStack = workspace.ai_stack;
 
   return `
     <section class="section-stack">
@@ -2207,6 +2626,10 @@ function renderOverviewSection() {
           </div>
         </article>
 
+        ${renderShopifySetupCheckCard()}
+
+        ${renderAiStackCard(aiStack)}
+
         <article class="workspace-card workspace-card-full">
           <div class="card-header">
             <div>
@@ -2223,8 +2646,416 @@ function renderOverviewSection() {
   `;
 }
 
+function renderShopifySetupCheckCard() {
+  const checks = Array.isArray(shopifyCapabilities.setup_checks) ? shopifyCapabilities.setup_checks : [];
+  const readyCount = checks.filter((item) => item && item.status === "live").length;
+
+  if (!checks.length) {
+    return `
+      <article class="workspace-card">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">Shopify Setup</p>
+            <h3>Storefront Readiness</h3>
+            <p class="card-copy">We could not verify the current Shopify setup checks yet.</p>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="workspace-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">Shopify Setup</p>
+          <h3>Storefront Readiness</h3>
+          <p class="card-copy">Use these checks before testing the embedded chat and customer-care flows in the dev store.</p>
+        </div>
+        <span class="status-chip ${readyCount === checks.length ? "live" : "monitor"}">
+          ${escapeHtml(`${readyCount}/${checks.length} ready`)}
+        </span>
+      </div>
+      <div class="setup-check-list">
+        ${checks
+          .map(
+            (item) => `
+              <div class="setup-check-item">
+                <div class="detail-row">
+                  <span>${escapeHtml(item.label || "Setup check")}</span>
+                  <span class="status-chip ${escapeHtml(item.status || "monitor")}">
+                    ${escapeHtml(item.state_label || "Check")}
+                  </span>
+                </div>
+                <p class="setup-check-detail">${escapeHtml(item.detail || "")}</p>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function formatMyStyleLabel(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "Not set";
+  }
+
+  return normalized
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function buildMyStyleMissingFields(profile) {
+  const missing = [];
+  if (!String(profile.gender || "").trim()) {
+    missing.push("gender");
+  }
+  if (!String(profile.sizeSummary || "").trim() || profile.sizeSummary === "Sizes not added yet") {
+    missing.push("sizes");
+  }
+  if (!String(profile.bodyType || "").trim()) {
+    missing.push("body type");
+  }
+  if (!String(profile.styleSummary || "").trim() && !String(profile.subtitle || "").trim()) {
+    missing.push("style cues");
+  }
+  if (!String(profile.budget || "").trim() || profile.budget === "Not set") {
+    missing.push("budget");
+  }
+  return missing;
+}
+
+function renderMyStyleMetric(label, value) {
+  return `
+    <div class="my-style-stat">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+    </div>
+  `;
+}
+
+function renderMyStyleProfileCard(profile) {
+  const basePath = resolveMerchantDashboardBasePath();
+  const detailHref = myStyleUtils.buildProfileDetailsUrl(profile.id, basePath);
+  const shopperLabel = profile.customerDisplayName || profile.customerEmail || "Customer profile";
+  const missing = buildMyStyleMissingFields(profile);
+
+  return `
+    <article class="my-style-profile-card">
+      <div class="my-style-profile-top">
+        <div>
+          <div class="my-style-profile-headline">
+            <h4>${escapeHtml(profile.name)}</h4>
+            ${profile.isPrimary ? '<span class="status-chip live">Primary</span>' : ""}
+          </div>
+          <p class="my-style-profile-meta">${escapeHtml(shopperLabel)}</p>
+          <p class="my-style-profile-copy">${escapeHtml(profile.subtitle)}</p>
+        </div>
+        <div class="my-style-progress-shell">
+          <strong>${escapeHtml(`${profile.completion}%`)}</strong>
+          <span>complete</span>
+        </div>
+      </div>
+
+      <div class="my-style-progress">
+        <div class="my-style-progress-fill" style="width: ${escapeHtml(`${profile.completion}%`)}"></div>
+      </div>
+
+      <dl class="my-style-detail-grid">
+        <div>
+          <dt>Relationship</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.relationship))}</dd>
+        </div>
+        <div>
+          <dt>Gender</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.gender))}</dd>
+        </div>
+        <div>
+          <dt>Sizes</dt>
+          <dd>${escapeHtml(profile.sizeSummary || "Sizes not added yet")}</dd>
+        </div>
+        <div>
+          <dt>Body type</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.bodyType))}</dd>
+        </div>
+        <div>
+          <dt>Budget</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.budget))}</dd>
+        </div>
+        <div>
+          <dt>Updated</dt>
+          <dd>${escapeHtml(formatTimestamp(profile.updatedAt))}</dd>
+        </div>
+      </dl>
+
+      ${
+        missing.length
+          ? `<p class="my-style-missing-copy">Still missing: ${escapeHtml(missing.join(", "))}.</p>`
+          : ""
+      }
+
+      <div class="card-header-actions my-style-card-actions">
+        <a class="secondary-button" href="${escapeHtml(detailHref)}" data-action="open-my-style-profile" data-profile-id="${escapeHtml(profile.id)}">Open profile</a>
+        ${
+          profile.completion < 100
+            ? `<a class="ghost-button" href="${escapeHtml(detailHref)}" data-action="open-my-style-profile" data-profile-id="${escapeHtml(profile.id)}">Continue setup</a>`
+            : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderMyStyleDetailCard(profile) {
+  const missing = buildMyStyleMissingFields(profile);
+
+  return `
+    <article class="workspace-card my-style-detail-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">Profile Detail</p>
+          <h3>${escapeHtml(profile.name)}</h3>
+          <p class="card-copy">
+            This is the saved profile the storefront AI can reuse when a shopper chooses who they are shopping for.
+          </p>
+        </div>
+        <span class="status-chip ${profile.completion >= 100 ? "live" : "monitor"}">
+          ${escapeHtml(`${profile.completion}% complete`)}
+        </span>
+      </div>
+
+      <div class="my-style-detail-hero">
+        <div class="my-style-detail-bubble">
+          <p class="card-eyebrow">Who Are You Shopping For?</p>
+          <h4>${escapeHtml(profile.customerDisplayName || profile.customerEmail || profile.name)}</h4>
+          <p>${escapeHtml(profile.subtitle)}</p>
+        </div>
+      </div>
+
+      <dl class="my-style-detail-grid my-style-detail-grid-wide">
+        <div>
+          <dt>Relationship</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.relationship))}</dd>
+        </div>
+        <div>
+          <dt>Gender</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.gender))}</dd>
+        </div>
+        <div>
+          <dt>Sizes</dt>
+          <dd>${escapeHtml(profile.sizeSummary || "Sizes not added yet")}</dd>
+        </div>
+        <div>
+          <dt>Body type</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.bodyType))}</dd>
+        </div>
+        <div>
+          <dt>Budget</dt>
+          <dd>${escapeHtml(formatMyStyleLabel(profile.budget))}</dd>
+        </div>
+        <div>
+          <dt>Last updated</dt>
+          <dd>${escapeHtml(formatTimestamp(profile.updatedAt))}</dd>
+        </div>
+      </dl>
+
+      ${
+        profile.styleSummary
+          ? `<div class="my-style-summary-callout"><strong>Style DNA</strong><p>${escapeHtml(profile.styleSummary)}</p></div>`
+          : ""
+      }
+
+      ${
+        missing.length
+          ? `<div class="my-style-summary-callout neutral"><strong>Needs attention</strong><p>${escapeHtml(
+              `This profile still needs ${missing.join(", ")} before storefront styling can rely on it without follow-up questions.`
+            )}</p></div>`
+          : `<div class="my-style-summary-callout success"><strong>Ready to style</strong><p>This profile is complete enough for profile-first recommendations and fewer repeated shopper questions.</p></div>`
+      }
+
+      <div class="card-header-actions">
+        <button class="secondary-button" type="button" data-action="close-my-style-detail">Back to all profiles</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderMyStyleCreateGuide() {
+  return `
+    <article class="workspace-card my-style-detail-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">Profile Setup</p>
+          <h3>Create the next shopper profile</h3>
+          <p class="card-copy">
+            Style profiles are created inside the Shopify customer account My Style experience. As soon as a shopper saves one there, it appears here automatically for merchant review.
+          </p>
+        </div>
+      </div>
+
+      <div class="my-style-setup-list">
+        <div class="my-style-setup-step"><span>1</span><p>Ask the shopper to sign in to their customer account.</p></div>
+        <div class="my-style-setup-step"><span>2</span><p>They create or update their My Style profile from the Profile page.</p></div>
+        <div class="my-style-setup-step"><span>3</span><p>Refresh this dashboard section and the saved profile will appear here with completion progress.</p></div>
+      </div>
+
+      <div class="card-header-actions">
+        <button class="secondary-button" type="button" data-action="refresh-my-style">Refresh profiles</button>
+        <button class="ghost-button" type="button" data-action="close-my-style-detail">Back to all profiles</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderMyStyleSection() {
+  const viewModel = myStyleUtils.buildMyStyleDashboardViewModel({
+    payload: myStyleProfilesState.profiles,
+    loading: myStyleProfilesState.loading,
+    error: myStyleProfilesState.error,
+    selectedProfileId: activeMyStyleProfileId,
+  });
+  const basePath = resolveMerchantDashboardBasePath();
+  const createHref = myStyleUtils.buildProfileCreateUrl(basePath);
+  const profileCount = viewModel.profiles ? viewModel.profiles.length : 0;
+
+  if (!myStyleProfilesState.loaded && !myStyleProfilesState.loading) {
+    loadMerchantStyleProfiles();
+  }
+
+  const detailPanel =
+    activeMyStyleAction === "create"
+      ? renderMyStyleCreateGuide()
+      : viewModel.selectedProfile
+        ? renderMyStyleDetailCard(viewModel.selectedProfile)
+        : "";
+
+  return `
+    <section class="section-stack">
+      <article class="workspace-card my-style-shell">
+        <div class="my-style-window-bar">
+          <div class="my-style-window-brand">
+            <span class="my-style-window-mark">SG</span>
+            <strong>My Style</strong>
+          </div>
+          <span class="status-chip live">Profile-first memory</span>
+        </div>
+
+        <div class="my-style-stage">
+          <div class="my-style-hero-bubble">
+            <p class="card-eyebrow">Who Are You Shopping For?</p>
+            <h3>Make saved style profiles visible to the merchant brain.</h3>
+            <p class="card-copy">
+              These account-level profiles help StyledGenie ask fewer repeated questions, skip basic gender clarification when it already knows the answer, and style more confidently across future storefront conversations.
+            </p>
+          </div>
+
+          <div class="my-style-stat-grid">
+            ${renderMyStyleMetric("Profiles saved", profileCount)}
+            ${renderMyStyleMetric(
+              "Primary profiles",
+              (viewModel.primaryProfiles || []).length
+            )}
+            ${renderMyStyleMetric(
+              "Average completion",
+              profileCount ? `${viewModel.averageCompletion}%` : "0%"
+            )}
+          </div>
+
+          <div class="card-header-actions my-style-hero-actions">
+            <a class="primary-button" href="${escapeHtml(createHref)}" data-action="create-my-style-profile">Create my style profile</a>
+            ${
+              profileCount
+                ? '<button class="secondary-button" type="button" data-action="refresh-my-style">Refresh profiles</button>'
+                : ""
+            }
+          </div>
+        </div>
+      </article>
+
+      ${
+        viewModel.state === "loading"
+          ? `
+            <article class="workspace-card my-style-state-card">
+              <p class="card-eyebrow">Loading</p>
+              <h3>Loading saved shopper profiles…</h3>
+              <p class="card-copy">We’re pulling the latest account-level style profiles from the backend now.</p>
+            </article>
+          `
+          : ""
+      }
+
+      ${
+        viewModel.state === "error"
+          ? `
+            <article class="workspace-card my-style-state-card">
+              <p class="card-eyebrow">Couldn’t load profiles</p>
+              <h3>My Style needs a retry</h3>
+              <p class="card-copy">${escapeHtml(viewModel.error)}</p>
+              <div class="card-header-actions">
+                <button class="primary-button" type="button" data-action="refresh-my-style">Retry</button>
+              </div>
+            </article>
+          `
+          : ""
+      }
+
+      ${
+        viewModel.state === "empty"
+          ? `
+            <article class="workspace-card my-style-state-card">
+              <p class="card-eyebrow">No profiles yet</p>
+              <h3>Create the first saved shopper profile</h3>
+              <p class="card-copy">Once shoppers save a My Style profile from customer accounts, it appears here with completion progress and reusable styling context.</p>
+              <div class="card-header-actions">
+                <a class="primary-button" href="${escapeHtml(createHref)}" data-action="create-my-style-profile">Create my style profile</a>
+                <button class="secondary-button" type="button" data-action="refresh-my-style">Refresh profiles</button>
+              </div>
+            </article>
+          `
+          : ""
+      }
+
+      ${
+        viewModel.state === "loaded" || viewModel.state === "detail"
+          ? `
+            <div class="panel-grid two-column">
+              <article class="workspace-card workspace-card-wide">
+                <div class="card-header">
+                  <div>
+                    <p class="card-eyebrow">Saved Profiles</p>
+                    <h3>Account-level style memory</h3>
+                    <p class="card-copy">These profiles are merchant-visible summaries of what shoppers have already told StyledGenie about fit, vibe, and budget.</p>
+                  </div>
+                  ${
+                    myStyleProfilesState.updatedAt
+                      ? `<span class="inline-badge">Updated ${escapeHtml(
+                          formatTimestamp(myStyleProfilesState.updatedAt)
+                        )}</span>`
+                      : ""
+                  }
+                </div>
+
+                <div class="my-style-profile-grid">
+                  ${viewModel.profiles.map((profile) => renderMyStyleProfileCard(profile)).join("")}
+                </div>
+              </article>
+              ${detailPanel}
+            </div>
+          `
+          : activeMyStyleAction === "create"
+            ? detailPanel
+            : ""
+      }
+    </section>
+  `;
+}
+
 function renderChatbotSection() {
   const settings = workspace.chatbot_customization;
+  const voiceConfig = normalizeVoiceConfig(workspace.chatbot_voice_config);
   const snapshot = workspace.overview;
   const promptPreview = getPreviewPromptLines(settings.suggested_prompts);
   const brandName = settings.brand_name || workspace.profile.brand_name || "StyledGenie";
@@ -2297,7 +3128,11 @@ function renderChatbotSection() {
                 <div class="customizer-logo-chip" id="chatbotPreviewLogo">${previewLogo}</div>
                 <strong id="chatbotPreviewBrandName">${escapeHtml(brandName)}</strong>
               </div>
-              <span class="chatbot-preview-menu">•••</span>
+              <span class="chatbot-preview-menu" aria-hidden="true">
+                <span class="chatbot-preview-dot"></span>
+                <span class="chatbot-preview-dot"></span>
+                <span class="chatbot-preview-dot"></span>
+              </span>
             </div>
 
             <div class="chatbot-preview-stage">
@@ -2308,12 +3143,14 @@ function renderChatbotSection() {
                 <h4 id="chatbotPreviewWelcomeTitle">${escapeHtml(settings.welcome_title)}</h4>
                 <p id="chatbotPreviewWelcomeMessage">${escapeHtml(settings.welcome_message)}</p>
                 <ul class="chatbot-preview-points">
-                  <li id="chatbotPreviewTone">Tone: ${escapeHtml(settings.tone_of_voice)}</li>
+                  <li id="chatbotPreviewTone">Voice: ${escapeHtml(
+                    voiceConfig.tone.map(formatVoiceLabel).join(", ")
+                  )}</li>
                   <li id="chatbotPreviewTypography">Typography: ${escapeHtml(
                     settings.heading_font
                   )} with ${escapeHtml(settings.body_font)}</li>
                   <li id="chatbotPreviewMarket">Target market: ${escapeHtml(
-                    settings.target_market
+                    voiceConfig.target_market || "Global"
                   )}</li>
                 </ul>
               </div>
@@ -2322,6 +3159,10 @@ function renderChatbotSection() {
                 ${promptPreview
                   .map((prompt) => `<span class="prompt-chip">${escapeHtml(prompt)}</span>`)
                   .join("")}
+              </div>
+
+              <div class="chatbot-voice-preview" id="chatbotVoicePreview">
+                ${buildVoicePreviewMarkup(voiceConfig)}
               </div>
 
               <button class="chatbot-preview-button" type="button">Done</button>
@@ -2355,13 +3196,6 @@ function renderChatbotSection() {
                 <label class="field">
                   <span>Welcome Title</span>
                   <input name="welcome_title" value="${escapeHtml(settings.welcome_title)}" />
-                </label>
-
-                <label class="field">
-                  <span>Target Market</span>
-                  <select name="target_market">
-                    ${renderSelectOptions(chatbotTargetMarkets, settings.target_market)}
-                  </select>
                 </label>
 
                 <label class="field field-full">
@@ -2454,20 +3288,6 @@ function renderChatbotSection() {
                 </label>
 
                 <label class="field field-full">
-                  <span>Tone of Voice</span>
-                  <textarea name="tone_of_voice" rows="3">${escapeHtml(
-                    settings.tone_of_voice
-                  )}</textarea>
-                </label>
-
-                <label class="field field-full">
-                  <span>Stylist Signature</span>
-                  <textarea name="stylist_signature" rows="3">${escapeHtml(
-                    settings.stylist_signature
-                  )}</textarea>
-                </label>
-
-                <label class="field field-full">
                   <span>Suggested Prompts (one per line)</span>
                   <textarea name="suggested_prompts" rows="4">${escapeHtml(
                     settings.suggested_prompts.join("\n")
@@ -2482,6 +3302,125 @@ function renderChatbotSection() {
           </form>
         </article>
       </div>
+
+      <article class="workspace-card chatbot-voice-card">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">Merchant Voice</p>
+            <h3>Customize your chatbot voice</h3>
+            <p class="card-copy">Define how your AI stylist should sound and format responses for your shoppers.</p>
+          </div>
+          <span class="inline-badge">Live shopper-facing signal</span>
+        </div>
+
+        <form id="chatbotVoiceForm" class="section-form">
+          <div class="voice-config-layout">
+            <div class="voice-config-column">
+              <div class="control-group">
+                <p class="control-group-title">Tone selection</p>
+                <div class="voice-chip-grid">
+                  ${renderVoiceToneChips(voiceConfig.tone)}
+                </div>
+              </div>
+
+              <div class="control-group">
+                <p class="control-group-title">Response style</p>
+                <div class="voice-toggle-grid">
+                  <label class="toggle-card">
+                    <input type="checkbox" name="use_headers" ${voiceConfig.use_headers ? "checked" : ""} />
+                    <div>
+                      <strong>Use headers</strong>
+                      <p>Let the stylist use short headings when structure helps.</p>
+                    </div>
+                  </label>
+                  <label class="toggle-card">
+                    <input type="checkbox" name="use_lists" ${voiceConfig.use_lists ? "checked" : ""} />
+                    <div>
+                      <strong>Use lists</strong>
+                      <p>Prefer bullets for outfit breakdowns, options, and next steps.</p>
+                    </div>
+                  </label>
+                  <label class="toggle-card">
+                    <input type="checkbox" name="use_emojis" ${voiceConfig.use_emojis ? "checked" : ""} />
+                    <div>
+                      <strong>Use emojis</strong>
+                      <p>Keep emojis tasteful and brand-safe when turned on.</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="form-grid voice-choice-grid">
+                  <label class="field field-full">
+                    <span>Emoji intensity</span>
+                    <div class="voice-chip-grid">
+                      ${renderVoiceChoiceChips("emoji_intensity", chatbotVoiceEmojiIntensityOptions, voiceConfig.emoji_intensity)}
+                    </div>
+                  </label>
+                  <label class="field field-full">
+                    <span>Response length</span>
+                    <div class="voice-chip-grid">
+                      ${renderVoiceChoiceChips("response_length", chatbotVoiceResponseLengthOptions, voiceConfig.response_length)}
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="voice-config-column">
+              <div class="control-group">
+                <p class="control-group-title">Instructional guidance</p>
+                <div class="form-grid">
+                  <label class="field field-full">
+                    <span>Custom instructions</span>
+                    <textarea name="custom_instructions" rows="4">${escapeHtml(
+                      voiceConfig.custom_instructions
+                    )}</textarea>
+                  </label>
+                  <label class="field">
+                    <span>Target market</span>
+                    <select name="voice_target_market">
+                      <option value="">Select target market</option>
+                      ${renderSelectOptions(chatbotTargetMarkets, voiceConfig.target_market)}
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Preferred greeting style</span>
+                    <input
+                      name="preferred_greeting_style"
+                      value="${escapeHtml(voiceConfig.preferred_greeting_style)}"
+                      placeholder="Warm and polished"
+                    />
+                  </label>
+                  <label class="field field-full">
+                    <span>Brand description</span>
+                    <textarea name="brand_description" rows="3">${escapeHtml(
+                      voiceConfig.brand_description
+                    )}</textarea>
+                  </label>
+                  <label class="field field-full">
+                    <span>Avoid phrases</span>
+                    <textarea name="avoid_phrases" rows="3">${escapeHtml(
+                      voiceConfig.avoid_phrases
+                    )}</textarea>
+                  </label>
+                </div>
+              </div>
+
+              <article class="voice-preview-card">
+                <p class="card-eyebrow">Live preview</p>
+                <div class="voice-preview-surface" id="voiceSettingsPreview">
+                  ${buildVoicePreviewMarkup(voiceConfig)}
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="form-actions voice-config-actions">
+            <p class="voice-config-feedback" id="voiceConfigFeedback" aria-live="polite"></p>
+            <button class="primary-button" type="submit" id="voiceConfigSaveButton">Save voice settings</button>
+          </div>
+        </form>
+      </article>
 
       <div class="panel-grid two-column">
         <article class="workspace-card">
@@ -2623,10 +3562,14 @@ function renderChatbotSection() {
 function renderCatalogSection() {
   const settings = workspace.catalog_intelligence;
   const profile = workspace.profile;
+  const descriptionTargetProduct = catalogProductOptions.find(
+    (item) => item.id === selectedDescriptionProductId
+  );
+  const suggestionFields = catalogIntelligenceSuggestions && catalogIntelligenceSuggestions.fields;
 
   return `
     <section class="section-stack">
-      <div class="panel-grid two-column">
+      <div class="panel-grid catalog-section-grid">
         <article class="workspace-card">
           <div class="card-header">
             <div>
@@ -2634,7 +3577,124 @@ function renderCatalogSection() {
               <h3>Catalog Intelligence Rules</h3>
               <p class="card-copy">Tell the system how to interpret products, prioritize attributes, and guide outfit compatibility.</p>
             </div>
+            <button
+              class="secondary-button"
+              type="button"
+              id="generateCatalogSuggestionsButton"
+              ${catalogSuggestionsLoading ? "disabled" : ""}
+            >
+              ${catalogSuggestionsLoading ? "Analyzing products..." : "Autogenerate Options"}
+            </button>
           </div>
+
+          <div class="callout-card premium-callout">
+            <p>
+              Review AI-generated rule suggestions from your synced catalog and apply the strongest options with one click.
+            </p>
+          </div>
+
+          ${
+            catalogIntelligenceSuggestions
+              ? `
+                <article class="catalog-suggestion-surface">
+                  <div class="card-header">
+                    <div>
+                      <p class="card-eyebrow">Autogenerated Options</p>
+                      <h3>Suggested Rule Sets</h3>
+                      <p class="card-copy">${escapeHtml(
+                        catalogIntelligenceSuggestions.message || "Review the generated options below."
+                      )}</p>
+                    </div>
+                    <div class="catalog-suggestion-meta">
+                      <span class="inline-badge">${escapeHtml(
+                        `${catalogIntelligenceSuggestions.products_analyzed || 0} products analyzed`
+                      )}</span>
+                      <span class="status-chip ${
+                        String(catalogIntelligenceSuggestions.vision_source || "").includes("google-vision")
+                          ? "live"
+                          : "learning"
+                      }">${escapeHtml(catalogIntelligenceSuggestions.vision_source || "fallback")}</span>
+                    </div>
+                  </div>
+
+                  <p class="catalog-suggestion-summary">${escapeHtml(
+                    catalogIntelligenceSuggestions.visual_summary || ""
+                  )}</p>
+
+                  <div class="catalog-sample-grid">
+                    ${(catalogIntelligenceSuggestions.sample_products || [])
+                      .map(
+                        (item) => `
+                          <article class="catalog-sample-card">
+                            ${
+                              item.image_url
+                                ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" />`
+                                : `<div class="catalog-sample-placeholder">${escapeHtml(
+                                    (item.title || "SG").slice(0, 2).toUpperCase()
+                                  )}</div>`
+                            }
+                            <div>
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <p>${escapeHtml(item.category || "General")}</p>
+                              <span>${escapeHtml((item.detected_signals || []).join(", ") || "Visual cues loading")}</span>
+                            </div>
+                          </article>
+                        `
+                      )
+                      .join("")}
+                  </div>
+
+                  <div class="catalog-suggestion-grid">
+                    ${renderCatalogSuggestionCard(
+                      "target_customer",
+                      "Target Customer",
+                      suggestionFields && suggestionFields.target_customer
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "brand_positioning",
+                      "Brand Positioning",
+                      suggestionFields && suggestionFields.brand_positioning
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "priority_tags",
+                      "Priority Tags",
+                      suggestionFields && suggestionFields.priority_tags
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "compatibility_rules",
+                      "Compatibility Rules",
+                      suggestionFields && suggestionFields.compatibility_rules
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "seasonal_focus",
+                      "Seasonal Focus",
+                      suggestionFields && suggestionFields.seasonal_focus
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "fit_guidance",
+                      "Fit Guidance",
+                      suggestionFields && suggestionFields.fit_guidance
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "recommendation_strictness",
+                      "Recommendation Strictness",
+                      suggestionFields && suggestionFields.recommendation_strictness
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "product_priority_rules",
+                      "Product Priority Rules",
+                      suggestionFields && suggestionFields.product_priority_rules
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "forbidden_recommendation_types",
+                      "Forbidden Recommendation Types",
+                      suggestionFields && suggestionFields.forbidden_recommendation_types
+                    )}
+                  </div>
+                </article>
+              `
+              : ""
+          }
 
           <form id="catalogForm" class="section-form">
             <div class="form-grid">
@@ -2679,6 +3739,47 @@ function renderCatalogSection() {
                   settings.fit_guidance
                 )}</textarea>
               </label>
+
+              <label class="field">
+                <span>Recommendation Strictness</span>
+                <select name="recommendation_strictness">
+                  ${renderSelectOptions(
+                    recommendationStrictnessOptions,
+                    settings.recommendation_strictness
+                  )}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Tagging Mode</span>
+                <select name="tagging_mode">
+                  ${renderSelectOptions(taggingModeOptions, settings.tagging_mode)}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Description Write Mode</span>
+                <select name="description_write_mode">
+                  ${renderSelectOptions(
+                    descriptionWriteModeOptions,
+                    settings.description_write_mode
+                  )}
+                </select>
+              </label>
+
+              <label class="field field-full">
+                <span>Product Priority Rules</span>
+                <textarea name="product_priority_rules" rows="3">${escapeHtml(
+                  settings.product_priority_rules
+                )}</textarea>
+              </label>
+
+              <label class="field field-full">
+                <span>Forbidden Recommendation Types</span>
+                <textarea name="forbidden_recommendation_types" rows="3">${escapeHtml(
+                  settings.forbidden_recommendation_types
+                )}</textarea>
+              </label>
             </div>
 
             <div class="form-actions">
@@ -2687,42 +3788,161 @@ function renderCatalogSection() {
           </form>
         </article>
 
-        <article class="workspace-card">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Connection View</p>
-              <h3>Store Intelligence Status</h3>
+        <div class="catalog-side-rail">
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">Connection View</p>
+                <h3>Store Intelligence Status</h3>
+              </div>
             </div>
-          </div>
 
-          <div class="detail-list">
-            <div class="detail-row"><span>Brand</span><strong>${escapeHtml(
-              profile.brand_name
-            )}</strong></div>
-            <div class="detail-row"><span>Shopify Domain</span><strong>${escapeHtml(
-              profile.connected_store_domain
-            )}</strong></div>
-            <div class="detail-row"><span>Storefront</span><strong>${escapeHtml(
-              profile.storefront_domain
-            )}</strong></div>
-            <div class="detail-row"><span>Products Imported</span><strong>${formatNumber(
-              workspace.overview.products_imported
-            )}</strong></div>
-            <div class="detail-row"><span>Distinct Styling Tags</span><strong>${formatNumber(
-              workspace.overview.styling_tags
-            )}</strong></div>
-            <div class="detail-row"><span>Last Sync</span><strong>${escapeHtml(
-              formatTimestamp(workspace.overview.last_catalog_sync)
-            )}</strong></div>
-          </div>
+            <div class="detail-list">
+              <div class="detail-row"><span>Brand</span><strong>${escapeHtml(
+                profile.brand_name
+              )}</strong></div>
+              <div class="detail-row"><span>Shopify Domain</span><strong>${escapeHtml(
+                profile.connected_store_domain
+              )}</strong></div>
+              <div class="detail-row"><span>Storefront</span><strong>${escapeHtml(
+                profile.storefront_domain
+              )}</strong></div>
+              <div class="detail-row"><span>Products Imported</span><strong>${formatNumber(
+                workspace.overview.products_imported
+              )}</strong></div>
+              <div class="detail-row"><span>Distinct Styling Tags</span><strong>${formatNumber(
+                workspace.overview.styling_tags
+              )}</strong></div>
+              <div class="detail-row"><span>Last Sync</span><strong>${escapeHtml(
+                formatTimestamp(workspace.overview.last_catalog_sync)
+              )}</strong></div>
+            </div>
 
-          <div class="callout-card">
-            <p>
-              Once a store is connected, this workspace becomes the operating brain for recommendations, styling rules,
-              customer care, and brand training.
-            </p>
-          </div>
-        </article>
+            <div class="callout-card">
+              <p>
+                Once a store is connected, this workspace becomes the operating brain for recommendations, styling rules,
+                customer care, and brand training.
+              </p>
+            </div>
+          </article>
+
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">AI Content Studio</p>
+                <h3>Product Description Drafting</h3>
+                <p class="card-copy">Generate concise fashion-commerce copy from the synced Shopify product data and your merchant rules.</p>
+              </div>
+              <div class="card-header-actions">
+                <span class="inline-badge">${escapeHtml(settings.description_write_mode)}</span>
+                <span class="status-chip ${shopifyCapabilities.write_products_ready ? "live" : "needs-setup"}">
+                  ${escapeHtml(shopifyCapabilities.write_products_ready ? "Apply ready" : "Scope needed")}
+                </span>
+              </div>
+            </div>
+
+            <form id="descriptionGeneratorForm" class="section-form">
+              <div class="form-grid">
+                <label class="field field-full">
+                  <span>Choose Product</span>
+                  <select name="description_product_id" id="descriptionProductSelect">
+                    ${renderProductOptionTags(catalogProductOptions, selectedDescriptionProductId, "Select a synced product")}
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-actions split-actions">
+                <button class="secondary-button" type="submit">Generate Draft</button>
+                <button
+                  class="primary-button"
+                  type="button"
+                  id="applyDescriptionButton"
+                  ${
+                    productDescriptionDraft && productDescriptionDraft.draft && shopifyCapabilities.write_products_ready
+                      ? ""
+                      : "disabled"
+                  }
+                >
+                  Apply To Shopify
+                </button>
+              </div>
+            </form>
+
+            <div class="callout-card">
+              ${
+                !shopifyCapabilities.write_products_ready
+                  ? `
+                    <p><strong>Shopify approval needed before apply</strong></p>
+                    <p>${escapeHtml(
+                      shopifyCapabilities.message ||
+                        "Add `write_products` to the app and approve the updated install before pushing descriptions live."
+                    )}</p>
+                    <p class="field-hint">Current scopes: ${escapeHtml(
+                      shopifyCapabilities.granted_scopes.length
+                        ? shopifyCapabilities.granted_scopes.join(", ")
+                        : "Not available"
+                    )}</p>
+                  `
+                  : ""
+              }
+              ${
+                productDescriptionDraft && productDescriptionDraft.draft
+                  ? `
+                    <p><strong>${escapeHtml(productDescriptionDraft.product_title)}</strong></p>
+                    <p>${escapeHtml(productDescriptionDraft.draft)}</p>
+                    <p class="field-hint">${escapeHtml(
+                      productDescriptionDraft.applied_to_shopify
+                        ? "This draft has already been applied to Shopify."
+                        : shopifyCapabilities.write_products_ready
+                          ? "Review the draft first. Apply pushes it to the connected Shopify product description."
+                          : "Review the draft first. Apply unlocks after Shopify approves `write_products` for this store."
+                    )}</p>
+                  `
+                  : `
+                    <p>Select a synced product to generate a polished description draft using the current brand tone and catalog intelligence settings.</p>
+                  `
+              }
+            </div>
+          </article>
+
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">AI Insights</p>
+                <h3>Catalog readiness for recommendations</h3>
+                <p class="card-copy">These signals show how ready the connected catalog is for styling, search, and description generation.</p>
+              </div>
+            </div>
+
+            <div class="detail-list">
+              <div class="detail-row"><span>Draft target</span><strong>${escapeHtml(
+                descriptionTargetProduct ? descriptionTargetProduct.title : "No product selected"
+              )}</strong></div>
+              <div class="detail-row"><span>Products with styling tags</span><strong>${formatNumber(
+                workspace.overview.tagged_products
+              )}</strong></div>
+              <div class="detail-row"><span>Distinct styling tags</span><strong>${formatNumber(
+                workspace.overview.styling_tags
+              )}</strong></div>
+              <div class="detail-row"><span>Catalog coverage</span><strong>${escapeHtml(
+                `${getCoverage(workspace.overview)}%`
+              )}</strong></div>
+            </div>
+
+            <div class="settings-chip-row">
+              ${(workspace.overview.category_metrics || [])
+                .slice(0, 6)
+                .map(
+                  (item) => `
+                    <span class="analytics-chip">${escapeHtml(
+                      `${item.label} · ${item.tagged_count}/${item.product_count}`
+                    )}</span>
+                  `
+                )
+                .join("")}
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   `;
@@ -2735,6 +3955,47 @@ function renderLooksSection() {
 
   return `
     <section class="section-stack">
+      <article class="workspace-card">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">AI Look Builder</p>
+            <h3>Generate curated looks from a hero product</h3>
+            <p class="card-copy">Choose a synced Shopify product, generate 2 to 3 full-look drafts, then edit and save them below.</p>
+          </div>
+        </div>
+
+        <form id="lookBuilderForm" class="section-form">
+          <div class="form-grid">
+            <label class="field">
+              <span>Hero Product</span>
+              <select name="look_builder_product_id" id="lookBuilderProductSelect">
+                ${renderProductOptionTags(catalogProductOptions, selectedLookBuilderHeroId, "Select a hero product")}
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Occasion Hint</span>
+              <input
+                id="lookBuilderOccasionInput"
+                name="look_builder_occasion_hint"
+                value="${escapeHtml(lookBuilderOccasionHint)}"
+                placeholder="Smart casual dinner, office, weekend, event..."
+              />
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="secondary-button" type="submit">Generate Look Drafts</button>
+          </div>
+        </form>
+
+        <div class="callout-card">
+          <p>
+            Generated drafts are added straight into Look Management so you can tweak titles, occasions, and styling notes before saving.
+          </p>
+        </div>
+      </article>
+
       <article class="workspace-card">
         <div class="card-header">
           <div>
@@ -2792,6 +4053,30 @@ function renderLooksSection() {
 }
 
 function renderCustomerCareSection() {
+  const settings = workspace.customer_care_settings || {
+    support_email: "info@styledgenie.com",
+    support_phone: "",
+    handoff_message:
+      "If this still feels unresolved, email info@styledgenie.com with your order number and a short note, and a human support teammate can take it from there.",
+    order_tracking_enabled: true,
+    human_handoff_enabled: true,
+    escalation_contacts: [],
+  };
+  const contacts = settings.escalation_contacts && settings.escalation_contacts.length
+    ? settings.escalation_contacts
+    : [
+        {
+          name: "",
+          role: "Customer Care",
+          email: "",
+          phone: "",
+          timezone: "Europe/Berlin",
+          shift_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          shift_start: "09:00",
+          shift_end: "17:00",
+          active: true,
+        },
+      ];
   const items = workspace.customer_care.length
     ? workspace.customer_care
     : [{ question: "", answer: "", category: "" }];
@@ -2808,6 +4093,131 @@ function renderCustomerCareSection() {
         </div>
 
         <form id="careForm" class="section-form">
+          <div class="control-group">
+            <p class="control-group-title">Escalation &amp; Tracking</p>
+            <div class="form-grid">
+              <label class="field">
+                <span>Support Email</span>
+                <input name="support_email" value="${escapeHtml(settings.support_email || "")}" />
+              </label>
+
+              <label class="field">
+                <span>Support Phone</span>
+                <input name="support_phone" value="${escapeHtml(settings.support_phone || "")}" />
+              </label>
+
+              <label class="field">
+                <span>Order Tracking</span>
+                <select name="order_tracking_enabled">
+                  ${renderSelectOptions(
+                    ["Enabled", "Disabled"],
+                    settings.order_tracking_enabled ? "Enabled" : "Disabled"
+                  )}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Human Handoff</span>
+                <select name="human_handoff_enabled">
+                  ${renderSelectOptions(
+                    ["Enabled", "Disabled"],
+                    settings.human_handoff_enabled ? "Enabled" : "Disabled"
+                  )}
+                </select>
+              </label>
+
+              <label class="field field-full">
+                <span>Handoff Copy</span>
+                <textarea name="handoff_message" rows="3">${escapeHtml(
+                  settings.handoff_message || ""
+                )}</textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="inline-section-head">
+              <div>
+                <p class="control-group-title">Real Support Team</p>
+                <p class="section-helper-copy">
+                  Add real teammates, their contact details, and shift timings so the chatbot can hand shoppers to the right person and notify them by email or WhatsApp when those channels are connected.
+                </p>
+              </div>
+              <button class="secondary-button" type="button" data-action="add-care-contact">Add Teammate</button>
+            </div>
+            <div class="repeater-list">
+              ${contacts
+                .map(
+                  (contact, index) => `
+                    <article class="repeater-card care-contact-item">
+                      <div class="repeater-header">
+                        <h4>Teammate ${index + 1}</h4>
+                        <button class="ghost-button" type="button" data-action="remove-care-contact" data-index="${index}">
+                          Remove
+                        </button>
+                      </div>
+
+                      <div class="form-grid">
+                        <label class="field">
+                          <span>Name</span>
+                          <input name="contact_name" value="${escapeHtml(contact.name || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Role</span>
+                          <input name="contact_role" value="${escapeHtml(contact.role || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Email</span>
+                          <input name="contact_email" value="${escapeHtml(contact.email || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Phone</span>
+                          <input name="contact_phone" value="${escapeHtml(contact.phone || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Timezone</span>
+                          <input name="contact_timezone" value="${escapeHtml(contact.timezone || "Europe/Berlin")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Active</span>
+                          <select name="contact_active">
+                            ${renderSelectOptions(["Enabled", "Disabled"], contact.active === false ? "Disabled" : "Enabled")}
+                          </select>
+                        </label>
+
+                        <label class="field field-full">
+                          <span>Shift Days</span>
+                          <input
+                            name="contact_shift_days"
+                            value="${escapeHtml((contact.shift_days || []).join(", "))}"
+                            placeholder="Monday, Tuesday, Wednesday"
+                          />
+                        </label>
+
+                        <label class="field">
+                          <span>Shift Start</span>
+                          <input name="contact_shift_start" value="${escapeHtml(contact.shift_start || "09:00")}" placeholder="09:00" />
+                        </label>
+
+                        <label class="field">
+                          <span>Shift End</span>
+                          <input name="contact_shift_end" value="${escapeHtml(contact.shift_end || "17:00")}" placeholder="17:00" />
+                        </label>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <div class="control-group">
+            <p class="control-group-title">FAQ Library</p>
           <div class="repeater-list">
             ${items
               .map(
@@ -2840,6 +4250,7 @@ function renderCustomerCareSection() {
                 `
               )
               .join("")}
+          </div>
           </div>
 
           <div class="form-actions split-actions">
@@ -2925,6 +4336,12 @@ function renderSection() {
     return;
   }
 
+  if (activeSection === "my-style") {
+    mainContent.innerHTML = renderMyStyleSection();
+    wireActiveSection();
+    return;
+  }
+
   if (activeSection === "chatbot") {
     mainContent.innerHTML = renderChatbotSection();
     wireActiveSection();
@@ -2953,20 +4370,126 @@ function renderSection() {
   wireActiveSection();
 }
 
+async function loadMerchantStyleProfiles(options = {}) {
+  const { force = false } = options;
+
+  if (myStyleProfilesState.loading) {
+    return;
+  }
+
+  if (myStyleProfilesState.loaded && !force) {
+    return;
+  }
+
+  myStyleProfilesState = {
+    ...myStyleProfilesState,
+    loading: true,
+    error: "",
+  };
+
+  if (activeSection === "my-style") {
+    renderSection();
+  }
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/style-profiles`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "I couldn’t load the saved style profiles right now.");
+    }
+
+    const payload = await response.json();
+    myStyleProfilesState = {
+      loading: false,
+      error: "",
+      loaded: true,
+      profiles: myStyleUtils.normalizeProfiles(payload),
+      updatedAt: payload.updatedAt || payload.updated_at || "",
+    };
+
+    if (
+      activeMyStyleProfileId &&
+      !myStyleProfilesState.profiles.some((profile) => profile.id === activeMyStyleProfileId)
+    ) {
+      activeMyStyleProfileId = "";
+    }
+  } catch (error) {
+    myStyleProfilesState = {
+      ...myStyleProfilesState,
+      loading: false,
+      loaded: true,
+      error: String(error?.message || "I couldn’t load the saved style profiles right now."),
+    };
+  }
+
+  if (activeSection === "my-style") {
+    renderSection();
+  }
+}
+
+async function loadCatalogProductOptions() {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/catalog/products`);
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    catalogProductOptions = payload.items || [];
+
+    if (
+      (!selectedDescriptionProductId ||
+        !catalogProductOptions.some((item) => item.id === selectedDescriptionProductId)) &&
+      catalogProductOptions.length
+    ) {
+      selectedDescriptionProductId = catalogProductOptions[0].id;
+      productDescriptionDraft = null;
+    }
+
+    if (
+      (!selectedLookBuilderHeroId ||
+        !catalogProductOptions.some((item) => item.id === selectedLookBuilderHeroId)) &&
+      catalogProductOptions.length
+    ) {
+      selectedLookBuilderHeroId = catalogProductOptions[0].id;
+    }
+  } catch (error) {
+    catalogProductOptions = [];
+  }
+}
+
+async function loadShopifyCapabilities() {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/shopify-capabilities`);
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    shopifyCapabilities = {
+      write_products_ready: Boolean(payload.write_products_ready),
+      granted_scopes: Array.isArray(payload.granted_scopes) ? payload.granted_scopes : [],
+      message: payload.message || "",
+      api_base_url: payload.api_base_url || "",
+      setup_checks: Array.isArray(payload.setup_checks) ? payload.setup_checks : [],
+    };
+  } catch (error) {
+    shopifyCapabilities = {
+      write_products_ready: false,
+      granted_scopes: [],
+      message: "Could not verify Shopify product write access.",
+      api_base_url: "",
+      setup_checks: [],
+    };
+  }
+}
+
 async function loadWorkspace(successMessage = "Workspace live") {
   setStatus("Loading workspace...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
-    if (!response.ok) {
-      throw new Error("Could not load merchant workspace");
-    }
-
-    workspace = await response.json();
-    lastChatbotDraftFingerprint = getChatbotFingerprint(workspace.chatbot_customization);
-    lastWorkspaceSnapshotFingerprint = getWorkspaceSnapshotFingerprint(workspace);
-    updateShellChrome();
-    renderSection();
+    const nextWorkspace = await fetchWorkspaceSnapshot();
+    await applyWorkspaceSnapshot(nextWorkspace);
     setStatus(successMessage, "success");
   } catch (error) {
     setStatus("Backend not reachable", "error");
@@ -2981,18 +4504,107 @@ async function loadWorkspace(successMessage = "Workspace live") {
   }
 }
 
+async function fetchWorkspaceSnapshot() {
+  const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
+  if (!response.ok) {
+    throw new Error("Could not load merchant workspace");
+  }
+
+  return response.json();
+}
+
+async function applyWorkspaceSnapshot(nextWorkspace) {
+  workspace = nextWorkspace;
+  await loadCatalogProductOptions();
+  await loadShopifyCapabilities();
+  lastChatbotDraftFingerprint = getChatbotFingerprint(workspace.chatbot_customization);
+  lastVoiceConfigDraftFingerprint = getVoiceConfigFingerprint(
+    normalizeVoiceConfig(workspace.chatbot_voice_config)
+  );
+  lastWorkspaceSnapshotFingerprint = getWorkspaceSnapshotFingerprint(workspace);
+  updateShellChrome();
+  renderSection();
+  if (activeSection === "my-style") {
+    loadMerchantStyleProfiles({ force: true });
+  }
+}
+
+function buildCatalogSyncCheckpoint(snapshot) {
+  const overview = (snapshot && snapshot.overview) || {};
+  return {
+    lastCatalogSync: overview.last_catalog_sync || "",
+    productsImported: Number(overview.products_imported || 0),
+    ordersImported: Number(overview.orders_imported || 0),
+  };
+}
+
+function didCatalogSyncAdvance(previousCheckpoint, nextSnapshot) {
+  const current = buildCatalogSyncCheckpoint(nextSnapshot);
+
+  if (!previousCheckpoint.lastCatalogSync && current.lastCatalogSync) {
+    return true;
+  }
+
+  if (
+    previousCheckpoint.lastCatalogSync &&
+    current.lastCatalogSync &&
+    current.lastCatalogSync !== previousCheckpoint.lastCatalogSync
+  ) {
+    return true;
+  }
+
+  if (current.productsImported > previousCheckpoint.productsImported) {
+    return true;
+  }
+
+  if (current.ordersImported > previousCheckpoint.ordersImported) {
+    return true;
+  }
+
+  return false;
+}
+
+async function verifyCatalogSyncAfterFailure(previousCheckpoint) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await waitForMs(2000);
+
+    try {
+      const nextWorkspace = await fetchWorkspaceSnapshot();
+      if (!didCatalogSyncAdvance(previousCheckpoint, nextWorkspace)) {
+        continue;
+      }
+
+      await applyWorkspaceSnapshot(nextWorkspace);
+      return nextWorkspace;
+    } catch (error) {
+      // Keep polling briefly in case the import is still finalizing.
+    }
+  }
+
+  return null;
+}
+
 function shouldAutoRefreshWorkspace() {
   if (activeSection !== "chatbot") {
     return false;
   }
 
   if (activeChatbotPage === "settings") {
-    const form = document.getElementById("chatbotForm");
-    if (!form) {
+    const chatbotForm = document.getElementById("chatbotForm");
+    const voiceForm = document.getElementById("chatbotVoiceForm");
+    if (!chatbotForm && !voiceForm) {
       return true;
     }
 
-    return getChatbotFingerprint(collectChatbotPayload(form)) === lastChatbotDraftFingerprint;
+    const chatbotStable =
+      !chatbotForm ||
+      getChatbotFingerprint(collectChatbotPayload(chatbotForm)) === lastChatbotDraftFingerprint;
+    const voiceStable =
+      !voiceForm ||
+      getVoiceConfigFingerprint(collectChatbotVoicePayload(voiceForm)) ===
+        lastVoiceConfigDraftFingerprint;
+
+    return chatbotStable && voiceStable;
   }
 
   return ["analytics", "builder"].includes(activeChatbotPage);
@@ -3006,23 +4618,14 @@ async function refreshWorkspaceSilently(options = {}) {
   }
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
-    if (!response.ok) {
-      return;
-    }
-
-    const nextWorkspace = await response.json();
+    const nextWorkspace = await fetchWorkspaceSnapshot();
     const nextFingerprint = getWorkspaceSnapshotFingerprint(nextWorkspace);
 
     if (!forceRender && nextFingerprint === lastWorkspaceSnapshotFingerprint) {
       return;
     }
 
-    workspace = nextWorkspace;
-    lastChatbotDraftFingerprint = getChatbotFingerprint(workspace.chatbot_customization);
-    lastWorkspaceSnapshotFingerprint = nextFingerprint;
-    updateShellChrome();
-    renderSection();
+    await applyWorkspaceSnapshot(nextWorkspace);
     setStatus("Bot analytics live", "success");
   } catch (error) {
     // Keep the dashboard stable if a refresh pulse fails.
@@ -3064,6 +4667,36 @@ function collectCustomerCareItems() {
   }));
 }
 
+function collectCustomerCareContacts() {
+  return Array.from(mainContent.querySelectorAll(".care-contact-item"))
+    .map((card) => ({
+      name: getFormValue(card, 'input[name="contact_name"]'),
+      role: getFormValue(card, 'input[name="contact_role"]') || "Customer Care",
+      email: getFormValue(card, 'input[name="contact_email"]'),
+      phone: getFormValue(card, 'input[name="contact_phone"]'),
+      timezone: getFormValue(card, 'input[name="contact_timezone"]') || "Europe/Berlin",
+      shift_days: getFormValue(card, 'input[name="contact_shift_days"]')
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      shift_start: getFormValue(card, 'input[name="contact_shift_start"]') || "09:00",
+      shift_end: getFormValue(card, 'input[name="contact_shift_end"]') || "17:00",
+      active: getFormValue(card, 'select[name="contact_active"]') !== "Disabled",
+    }))
+    .filter((item) => item.name || item.email || item.phone);
+}
+
+function collectCustomerCareSettings(form) {
+  return {
+    support_email: getFormValue(form, 'input[name="support_email"]'),
+    support_phone: getFormValue(form, 'input[name="support_phone"]'),
+    handoff_message: getFormValue(form, 'textarea[name="handoff_message"]'),
+    order_tracking_enabled: getFormValue(form, 'select[name="order_tracking_enabled"]') !== "Disabled",
+    human_handoff_enabled: getFormValue(form, 'select[name="human_handoff_enabled"]') !== "Disabled",
+    escalation_contacts: collectCustomerCareContacts(),
+  };
+}
+
 function collectKnowledgeItems() {
   return Array.from(mainContent.querySelectorAll(".knowledge-item")).map((card) => ({
     title: getFormValue(card, 'input[name="title"]'),
@@ -3090,8 +4723,12 @@ function collectChatbotPayload(form) {
     assistant_name: getFormValue(form, 'input[name="assistant_name"]'),
     welcome_title: getFormValue(form, 'input[name="welcome_title"]'),
     welcome_message: getFormValue(form, 'textarea[name="welcome_message"]'),
-    tone_of_voice: getFormValue(form, 'textarea[name="tone_of_voice"]'),
-    stylist_signature: getFormValue(form, 'textarea[name="stylist_signature"]'),
+    tone_of_voice:
+      (workspace && workspace.chatbot_customization && workspace.chatbot_customization.tone_of_voice) ||
+      "Warm, polished, confident, and empathetic.",
+    stylist_signature:
+      (workspace && workspace.chatbot_customization && workspace.chatbot_customization.stylist_signature) ||
+      "Offer styling rationale, not just product links.",
     primary_color: getFormValue(form, 'input[name="primary_color"]'),
     accent_color: getFormValue(form, 'input[name="accent_color"]'),
     surface_color: getFormValue(form, 'input[name="surface_color"]'),
@@ -3102,7 +4739,9 @@ function collectChatbotPayload(form) {
     primary_text_style: getFormValue(form, 'select[name="primary_text_style"]'),
     accent_text_style: getFormValue(form, 'select[name="accent_text_style"]'),
     body_text_style: getFormValue(form, 'select[name="body_text_style"]'),
-    target_market: getFormValue(form, 'select[name="target_market"]'),
+    target_market:
+      (workspace && workspace.chatbot_customization && workspace.chatbot_customization.target_market) ||
+      "Europe",
     suggested_prompts: getFormValue(form, 'textarea[name="suggested_prompts"]')
       .split("\n")
       .map((item) => item.trim())
@@ -3110,12 +4749,36 @@ function collectChatbotPayload(form) {
   };
 }
 
-function updateChatbotPreviewFromForm(form) {
+function collectChatbotVoicePayload(form) {
+  const selectedTones = Array.from(form.querySelectorAll('input[name="voice_tone"]:checked'))
+    .map((input) => String(input.value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const useEmojis = Boolean(form.querySelector('input[name="use_emojis"]')?.checked);
+
+  return normalizeVoiceConfig({
+    tone: selectedTones,
+    use_headers: Boolean(form.querySelector('input[name="use_headers"]')?.checked),
+    use_lists: Boolean(form.querySelector('input[name="use_lists"]')?.checked),
+    use_emojis: useEmojis,
+    emoji_intensity: useEmojis
+      ? getFormValue(form, 'input[name="emoji_intensity"]:checked') || "light"
+      : "none",
+    response_length: getFormValue(form, 'input[name="response_length"]:checked') || "balanced",
+    custom_instructions: getFormValue(form, 'textarea[name="custom_instructions"]'),
+    target_market: getFormValue(form, 'select[name="voice_target_market"]'),
+    brand_description: getFormValue(form, 'textarea[name="brand_description"]'),
+    avoid_phrases: getFormValue(form, 'textarea[name="avoid_phrases"]'),
+    preferred_greeting_style: getFormValue(form, 'input[name="preferred_greeting_style"]'),
+  });
+}
+
+function updateChatbotPreviewFromForms(form, voiceForm) {
   if (!form) {
     return;
   }
 
   const draft = collectChatbotPayload(form);
+  const voiceDraft = voiceForm ? collectChatbotVoicePayload(voiceForm) : normalizeVoiceConfig(workspace.chatbot_voice_config);
   const brandName = draft.brand_name || workspace.profile.brand_name || "StyledGenie";
   const promptLines = getPreviewPromptLines(draft.suggested_prompts);
   const previewShell = document.getElementById("chatbotPreviewShell");
@@ -3128,13 +4791,15 @@ function updateChatbotPreviewFromForm(form) {
   const previewTypography = document.getElementById("chatbotPreviewTypography");
   const previewMarket = document.getElementById("chatbotPreviewMarket");
   const previewPrompts = document.getElementById("chatbotPreviewPrompts");
+  const previewVoice = document.getElementById("chatbotVoicePreview");
+  const settingsPreview = document.getElementById("voiceSettingsPreview");
 
   if (previewShell) {
-    previewShell.style.setProperty("--bot-primary", draft.primary_color || "#d8cfbd");
-    previewShell.style.setProperty("--bot-accent", draft.accent_color || "#1d2430");
-    previewShell.style.setProperty("--bot-surface", draft.surface_color || "#f7f2e7");
-    previewShell.style.setProperty("--bot-bubble", draft.bubble_color || "#d8cfbd");
-    previewShell.style.setProperty("--bot-text", draft.text_color || "#171717");
+    previewShell.style.setProperty("--bot-primary", draft.primary_color || "#e6e6e6");
+    previewShell.style.setProperty("--bot-accent", draft.accent_color || "#111111");
+    previewShell.style.setProperty("--bot-surface", draft.surface_color || "#f4f4f4");
+    previewShell.style.setProperty("--bot-bubble", draft.bubble_color || "#e6e6e6");
+    previewShell.style.setProperty("--bot-text", draft.text_color || "#111111");
     previewShell.style.setProperty(
       "--preview-heading-font",
       draft.heading_font || "Playfair Display"
@@ -3170,7 +4835,7 @@ function updateChatbotPreviewFromForm(form) {
   }
 
   if (previewTone) {
-    previewTone.textContent = `Tone: ${draft.tone_of_voice || "Warm, polished, confident, and empathetic."}`;
+    previewTone.textContent = `Voice: ${voiceDraft.tone.map(formatVoiceLabel).join(", ")}`;
   }
 
   if (previewTypography) {
@@ -3180,7 +4845,7 @@ function updateChatbotPreviewFromForm(form) {
   }
 
   if (previewMarket) {
-    previewMarket.textContent = `Target market: ${draft.target_market || "Europe"}`;
+    previewMarket.textContent = `Target market: ${voiceDraft.target_market || "Global"}`;
   }
 
   if (previewPrompts) {
@@ -3188,10 +4853,19 @@ function updateChatbotPreviewFromForm(form) {
       ? promptLines.map((prompt) => `<span class="prompt-chip">${escapeHtml(prompt)}</span>`).join("")
       : '<span class="prompt-chip">Add suggested prompts to preview the guided shopper journey.</span>';
   }
+
+  if (previewVoice) {
+    previewVoice.innerHTML = buildVoicePreviewMarkup(voiceDraft);
+  }
+
+  if (settingsPreview) {
+    settingsPreview.innerHTML = buildVoicePreviewMarkup(voiceDraft);
+  }
 }
 
 function setupChatbotLivePreview() {
   const form = document.getElementById("chatbotForm");
+  const voiceForm = document.getElementById("chatbotVoiceForm");
   if (!form) {
     return;
   }
@@ -3199,7 +4873,7 @@ function setupChatbotLivePreview() {
   const fileInput = form.querySelector('input[name="logo_file"]');
   const logoUrlInput = form.querySelector('input[name="logo_url"]');
   const logoHint = document.getElementById("logoUploadHint");
-  const syncPreview = () => updateChatbotPreviewFromForm(form);
+  const syncPreview = () => updateChatbotPreviewFromForms(form, voiceForm);
   const scheduleAutosave = () => {
     if (chatbotAutosaveTimer) {
       window.clearTimeout(chatbotAutosaveTimer);
@@ -3279,7 +4953,76 @@ function setupChatbotLivePreview() {
     syncPreview();
     scheduleAutosave();
   });
+  if (voiceForm) {
+    voiceForm.addEventListener("input", syncPreview);
+    voiceForm.addEventListener("change", syncPreview);
+  }
   syncPreview();
+}
+
+async function saveChatbotVoiceConfig(form) {
+  if (!form) {
+    return;
+  }
+
+  const payload = collectChatbotVoicePayload(form);
+  const saveButton = document.getElementById("voiceConfigSaveButton");
+  const feedback = document.getElementById("voiceConfigFeedback");
+
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+  }
+  if (feedback) {
+    feedback.textContent = "";
+    feedback.dataset.tone = "neutral";
+  }
+  setStatus("Saving chatbot voice...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/chatbot/voice-config`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let message = "Could not save chatbot voice settings.";
+      try {
+        const errorData = await response.json();
+        message = errorData.detail || message;
+      } catch (error) {
+        message = response.statusText || message;
+      }
+      throw new Error(message);
+    }
+
+    const savedConfig = normalizeVoiceConfig(await response.json());
+    workspace.chatbot_voice_config = savedConfig;
+    lastVoiceConfigDraftFingerprint = getVoiceConfigFingerprint(savedConfig);
+    lastWorkspaceSnapshotFingerprint = getWorkspaceSnapshotFingerprint(workspace);
+    updateChatbotPreviewFromForms(document.getElementById("chatbotForm"), form);
+    setStatus("Chatbot voice saved", "success");
+    if (feedback) {
+      feedback.textContent = "Voice settings saved and now feeding shopper-facing responses.";
+      feedback.dataset.tone = "success";
+    }
+    showToast("Voice saved", "The shopper-facing voice configuration is live.", "success");
+  } catch (error) {
+    setStatus(error.message || "Could not save voice config", "error");
+    if (feedback) {
+      feedback.textContent = error.message || "Could not save voice settings.";
+      feedback.dataset.tone = "error";
+    }
+    showToast("Voice save failed", error.message || "Please try again.", "error");
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = "Save voice settings";
+    }
+  }
 }
 
 function collectCatalogPayload(form) {
@@ -3290,6 +5033,14 @@ function collectCatalogPayload(form) {
     compatibility_rules: getFormValue(form, 'textarea[name="compatibility_rules"]'),
     seasonal_focus: getFormValue(form, 'textarea[name="seasonal_focus"]'),
     fit_guidance: getFormValue(form, 'textarea[name="fit_guidance"]'),
+    recommendation_strictness: getFormValue(form, 'select[name="recommendation_strictness"]'),
+    product_priority_rules: getFormValue(form, 'textarea[name="product_priority_rules"]'),
+    forbidden_recommendation_types: getFormValue(
+      form,
+      'textarea[name="forbidden_recommendation_types"]'
+    ),
+    tagging_mode: getFormValue(form, 'select[name="tagging_mode"]'),
+    description_write_mode: getFormValue(form, 'select[name="description_write_mode"]'),
   };
 }
 
@@ -3362,6 +5113,7 @@ async function saveSection(endpoint, payload, successText) {
 }
 
 async function syncCatalog() {
+  const previousCheckpoint = buildCatalogSyncCheckpoint(workspace);
   const storeName =
     (workspace && workspace.profile && workspace.profile.brand_name) ||
     (workspace && workspace.overview && workspace.overview.store_name) ||
@@ -3409,6 +5161,21 @@ async function syncCatalog() {
       "success"
     );
   } catch (error) {
+    setStatus("Verifying the latest sync result...", "neutral");
+    const recoveredWorkspace = await verifyCatalogSyncAfterFailure(previousCheckpoint);
+
+    if (recoveredWorkspace) {
+      showToast(
+        "Catalog synced",
+        `The sync finished after the dashboard connection dropped. Imported ${formatNumber(
+          recoveredWorkspace.overview.products_imported
+        )} products into the merchant brain.`,
+        "success"
+      );
+      setStatus("Catalog synced", "success");
+      return;
+    }
+
     const detail = error.message || "The dashboard could not refresh the connected catalog just now.";
     setStatus(detail, "error");
     showToast(
@@ -3421,11 +5188,208 @@ async function syncCatalog() {
   }
 }
 
+async function generateCatalogIntelligenceSuggestions() {
+  catalogSuggestionsLoading = true;
+  setStatus("Analyzing synced products...", "neutral");
+  renderSection();
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/catalog-intelligence-suggestions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate catalog intelligence options.");
+    }
+
+    catalogIntelligenceSuggestions = await response.json();
+    setStatus("Catalog intelligence options ready", "success");
+    renderSection();
+    showToast(
+      "Options generated",
+      "Review the suggested rule options and click any one to apply it into the form.",
+      "success"
+    );
+  } catch (error) {
+    setStatus(error.message || "Catalog intelligence generation failed", "error");
+    showToast("Autogeneration failed", error.message || "Please try again.", "error");
+  } finally {
+    catalogSuggestionsLoading = false;
+    renderSection();
+  }
+}
+
+function applyCatalogSuggestion(fieldName, value) {
+  const catalogForm = document.getElementById("catalogForm");
+  if (!catalogForm) {
+    return;
+  }
+
+  const selectorMap = {
+    target_customer: 'textarea[name="target_customer"]',
+    brand_positioning: 'textarea[name="brand_positioning"]',
+    priority_tags: 'textarea[name="priority_tags"]',
+    compatibility_rules: 'textarea[name="compatibility_rules"]',
+    seasonal_focus: 'textarea[name="seasonal_focus"]',
+    fit_guidance: 'textarea[name="fit_guidance"]',
+    recommendation_strictness: 'select[name="recommendation_strictness"]',
+    product_priority_rules: 'textarea[name="product_priority_rules"]',
+    forbidden_recommendation_types: 'textarea[name="forbidden_recommendation_types"]',
+  };
+
+  const selector = selectorMap[fieldName];
+  if (!selector) {
+    return;
+  }
+
+  const input = catalogForm.querySelector(selector);
+  if (!input) {
+    return;
+  }
+
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  showToast("Suggestion applied", "The selected option has been added to the form. Save when you’re ready.", "success");
+}
+
+async function generateProductDescriptionDraft() {
+  if (!selectedDescriptionProductId) {
+    showToast("Select a product", "Choose a synced Shopify product first.", "error");
+    return;
+  }
+
+  setStatus("Generating product description...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-draft`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_id: selectedDescriptionProductId,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate the description draft.");
+    }
+
+    productDescriptionDraft = await response.json();
+    setStatus("Description draft ready", "success");
+    renderSection();
+    showToast("Draft generated", "Review the description, then apply it to Shopify when you’re happy.", "success");
+  } catch (error) {
+    setStatus(error.message || "Description generation failed", "error");
+    showToast("Draft failed", error.message || "Please try again.", "error");
+  }
+}
+
+async function applyProductDescriptionDraft() {
+  if (!productDescriptionDraft || !productDescriptionDraft.product_id || !productDescriptionDraft.draft) {
+    showToast("No draft ready", "Generate a description draft first.", "error");
+    return;
+  }
+
+  setStatus("Applying description to Shopify...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-apply`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_id: productDescriptionDraft.product_id,
+        draft: productDescriptionDraft.draft,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not apply the description to Shopify.");
+    }
+
+    productDescriptionDraft = await response.json();
+    setStatus("Description applied to Shopify", "success");
+    renderSection();
+    showToast("Applied to Shopify", productDescriptionDraft.message || "The description is now live in Shopify.", "success");
+  } catch (error) {
+    const friendlyMessage = getFriendlyApplyErrorMessage(error.message);
+    setStatus(friendlyMessage || "Description apply failed", "error");
+    showToast("Apply failed", friendlyMessage || "Please try again.", "error");
+  }
+}
+
+async function generateLookBuilderDrafts() {
+  if (!selectedLookBuilderHeroId) {
+    showToast("Select a hero product", "Choose a product to build looks around first.", "error");
+    return;
+  }
+
+  setStatus("Generating merchant look drafts...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/look-builder`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        hero_product_id: selectedLookBuilderHeroId,
+        occasion_hint: lookBuilderOccasionHint || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate look drafts.");
+    }
+
+    const payload = await response.json();
+    const generatedItems = payload.items || [];
+    if (!generatedItems.length) {
+      throw new Error("No look drafts were generated.");
+    }
+
+    const existingLooks = (workspace.looks || []).filter(
+      (item) => item.title || item.occasion || item.style_notes
+    );
+    workspace.looks = existingLooks.concat(generatedItems);
+    setStatus("Look drafts added to Look Management", "success");
+    activeSection = "looks";
+    renderSection();
+    showToast(
+      "Look drafts added",
+      `${generatedItems.length} AI-generated looks were added. Review and save them in Look Management.`,
+      "success"
+    );
+  } catch (error) {
+    setStatus(error.message || "Look builder failed", "error");
+    showToast("Look builder failed", error.message || "Please try again.", "error");
+  }
+}
+
 navButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    activeSection = button.dataset.section;
+    activeSection = sanitizeSection(button.dataset.section);
+    if (activeSection !== "my-style") {
+      activeMyStyleProfileId = "";
+      activeMyStyleAction = "";
+    }
+    syncDashboardRouteState();
     updateShellChrome();
     renderSection();
+
+    if (activeSection === "my-style") {
+      loadMerchantStyleProfiles({ force: !myStyleProfilesState.loaded });
+      return;
+    }
 
     if (shouldAutoRefreshWorkspace()) {
       refreshWorkspaceSilently({ forceRender: true });
@@ -3450,6 +5414,8 @@ function wireActiveSection() {
         collectChatbotPayload(document.getElementById("chatbotForm")),
         "Chatbot customization saved"
       ),
+    chatbotVoiceForm: () =>
+      saveChatbotVoiceConfig(document.getElementById("chatbotVoiceForm")),
     catalogForm: () =>
       saveSection(
         "/api/merchant/catalog-intelligence",
@@ -3465,7 +5431,10 @@ function wireActiveSection() {
     careForm: () =>
       saveSection(
         "/api/merchant/customer-care",
-        { items: collectCustomerCareItems() },
+        {
+          items: collectCustomerCareItems(),
+          settings: collectCustomerCareSettings(document.getElementById("careForm")),
+        },
         "Customer care setup saved"
       ),
     knowledgeForm: () =>
@@ -3498,6 +5467,67 @@ function wireActiveSection() {
     });
   }
 
+  const descriptionGeneratorForm = document.getElementById("descriptionGeneratorForm");
+  if (descriptionGeneratorForm) {
+    descriptionGeneratorForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const select = document.getElementById("descriptionProductSelect");
+      selectedDescriptionProductId = select ? select.value : selectedDescriptionProductId;
+      generateProductDescriptionDraft();
+    });
+  }
+
+  const applyDescriptionButton = document.getElementById("applyDescriptionButton");
+  if (applyDescriptionButton) {
+    applyDescriptionButton.addEventListener("click", () => {
+      applyProductDescriptionDraft();
+    });
+  }
+
+  const descriptionProductSelect = document.getElementById("descriptionProductSelect");
+  if (descriptionProductSelect) {
+    descriptionProductSelect.addEventListener("change", () => {
+      selectedDescriptionProductId = descriptionProductSelect.value;
+      if (productDescriptionDraft && productDescriptionDraft.product_id !== selectedDescriptionProductId) {
+        productDescriptionDraft = null;
+        renderSection();
+      }
+    });
+  }
+
+  const lookBuilderForm = document.getElementById("lookBuilderForm");
+  if (lookBuilderForm) {
+    lookBuilderForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const select = document.getElementById("lookBuilderProductSelect");
+      const input = document.getElementById("lookBuilderOccasionInput");
+      selectedLookBuilderHeroId = select ? select.value : selectedLookBuilderHeroId;
+      lookBuilderOccasionHint = input ? input.value.trim() : lookBuilderOccasionHint;
+      generateLookBuilderDrafts();
+    });
+  }
+
+  const lookBuilderProductSelect = document.getElementById("lookBuilderProductSelect");
+  if (lookBuilderProductSelect) {
+    lookBuilderProductSelect.addEventListener("change", () => {
+      selectedLookBuilderHeroId = lookBuilderProductSelect.value;
+    });
+  }
+
+  const lookBuilderOccasionInput = document.getElementById("lookBuilderOccasionInput");
+  if (lookBuilderOccasionInput) {
+    lookBuilderOccasionInput.addEventListener("input", () => {
+      lookBuilderOccasionHint = lookBuilderOccasionInput.value.trim();
+    });
+  }
+
+  const generateCatalogSuggestionsButton = document.getElementById("generateCatalogSuggestionsButton");
+  if (generateCatalogSuggestionsButton) {
+    generateCatalogSuggestionsButton.addEventListener("click", () => {
+      generateCatalogIntelligenceSuggestions();
+    });
+  }
+
   setupChatbotLivePreview();
 }
 
@@ -3518,9 +5548,58 @@ mainContent.addEventListener("click", (event) => {
   }
 
   if (trigger.dataset.action === "navigate-section") {
-    activeSection = trigger.dataset.target || "overview";
+    activeSection = sanitizeSection(trigger.dataset.target || "overview");
+    if (activeSection !== "my-style") {
+      activeMyStyleProfileId = "";
+      activeMyStyleAction = "";
+    }
+    syncDashboardRouteState();
     updateShellChrome();
     renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "open-my-style-profile") {
+    event.preventDefault();
+    activeSection = "my-style";
+    activeMyStyleProfileId = trigger.dataset.profileId || "";
+    activeMyStyleAction = "";
+    syncDashboardRouteState();
+    updateShellChrome();
+    renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "create-my-style-profile") {
+    event.preventDefault();
+    activeSection = "my-style";
+    activeMyStyleProfileId = "";
+    activeMyStyleAction = "create";
+    syncDashboardRouteState();
+    updateShellChrome();
+    renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "close-my-style-detail") {
+    activeSection = "my-style";
+    activeMyStyleProfileId = "";
+    activeMyStyleAction = "";
+    syncDashboardRouteState();
+    updateShellChrome();
+    renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "refresh-my-style") {
+    loadMerchantStyleProfiles({ force: true });
+    return;
+  }
+
+  if (trigger.dataset.action === "apply-catalog-suggestion") {
+    const fieldName = trigger.dataset.field || "";
+    const value = decodeURIComponent(trigger.dataset.value || "");
+    applyCatalogSuggestion(fieldName, value);
     return;
   }
 
@@ -3567,8 +5646,36 @@ mainContent.addEventListener("click", (event) => {
     return;
   }
 
+  if (trigger.dataset.action === "add-care-contact") {
+    workspace.customer_care_settings = workspace.customer_care_settings || {};
+    workspace.customer_care_settings.escalation_contacts =
+      workspace.customer_care_settings.escalation_contacts || [];
+    workspace.customer_care_settings.escalation_contacts.push({
+      name: "",
+      role: "Customer Care",
+      email: "",
+      phone: "",
+      timezone: "Europe/Berlin",
+      shift_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      shift_start: "09:00",
+      shift_end: "17:00",
+      active: true,
+    });
+    renderSection();
+    return;
+  }
+
   if (trigger.dataset.action === "remove-care") {
     workspace.customer_care.splice(index, 1);
+    renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "remove-care-contact") {
+    workspace.customer_care_settings = workspace.customer_care_settings || {};
+    workspace.customer_care_settings.escalation_contacts =
+      workspace.customer_care_settings.escalation_contacts || [];
+    workspace.customer_care_settings.escalation_contacts.splice(index, 1);
     renderSection();
     return;
   }
@@ -3585,5 +5692,15 @@ mainContent.addEventListener("click", (event) => {
   }
 });
 
+window.addEventListener("popstate", () => {
+  applyDashboardRouteState(readDashboardRouteState());
+  updateShellChrome();
+  renderSection();
+  if (activeSection === "my-style") {
+    loadMerchantStyleProfiles({ force: !myStyleProfilesState.loaded });
+  }
+});
+
+applyDashboardRouteState(readDashboardRouteState());
 loadWorkspace();
 startWorkspaceHeartbeat();

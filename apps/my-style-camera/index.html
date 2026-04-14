@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>StyledGenie My Style Scan</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="scan-shell">
+      <section class="scan-panel">
+        <p class="scan-eyebrow">StyledGenie My Style</p>
+        <h1 id="scan-title">Scan Full Body</h1>
+        <p id="scan-copy" class="scan-copy">
+          Use your camera to capture a solo full-body image, then we’ll check the photo quality before you finish your profile.
+        </p>
+        <div class="scan-helper">
+          AI can make mistakes. Please review and edit any details before saving.
+        </div>
+
+        <div id="scan-status" class="scan-status hidden" role="status" aria-live="polite"></div>
+        <div id="scan-diagnostics" class="scan-diagnostics hidden" aria-live="polite"></div>
+
+        <div class="scan-frame">
+          <video id="scan-video" autoplay muted playsinline></video>
+          <img id="scan-preview" alt="Captured full body preview" class="hidden" />
+          <canvas id="scan-canvas" class="hidden"></canvas>
+        </div>
+
+        <div id="scan-guidance" class="scan-guidance hidden"></div>
+        <div id="scan-analysis" class="scan-guidance hidden"></div>
+
+        <div class="scan-actions">
+          <button id="capture-button" class="button button-primary" type="button">Capture</button>
+          <button id="retake-button" class="button button-secondary hidden" type="button">Retake</button>
+          <button id="analyze-button" class="button button-secondary hidden" type="button" disabled>Analyze</button>
+          <button id="continue-button" class="button button-primary hidden" type="button" disabled>Continue</button>
+          <button id="fallback-button" class="button button-secondary hidden" type="button">
+            Use device camera instead
+          </button>
+          <button id="cancel-button" class="button button-ghost" type="button">Cancel</button>
+        </div>
+
+        <input id="fallback-input" class="hidden" type="file" accept="image/*" capture="environment" />
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

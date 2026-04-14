@@ -1,0 +1,26 @@
+api_version = "2026-01"
+uid = "e0d811c4-dc78-c61a-e66b-59a0146d24f2d1872942"
+
+[[extensions]]
+name = "StyledGenie My Style"
+handle = "styledgenie-my-style"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/ProfileBlockExtension.jsx"
+target = "customer-account.profile.block.render"
+
+[[extensions.targeting]]
+module = "./src/AccountFooterChatBridge.jsx"
+target = "customer-account.footer.render-after"
+
+[extensions.capabilities]
+network_access = true
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+key = "api_base_url"
+type = "single_line_text_field"
+name = "Backend API Base URL"
+description = "Public StyledGenie API URL used to load and save customer style profiles."

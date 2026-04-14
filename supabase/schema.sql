@@ -68,7 +68,11 @@ create table if not exists chat_sessions (
     id uuid primary key default gen_random_uuid(),
     merchant_id uuid not null references merchants(id) on delete cascade,
     customer_identifier text,
-    started_at timestamptz not null default now()
+    active_profile_id text,
+    selected_service text,
+    last_entry_mode text,
+    started_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 create table if not exists chat_messages (
@@ -88,6 +92,36 @@ create table if not exists recommendation_events (
     input_summary text,
     recommended_product_ids text[],
     created_at timestamptz not null default now()
+);
+
+create table if not exists support_requests (
+    id uuid primary key default gen_random_uuid(),
+    merchant_id uuid not null references merchants(id) on delete cascade,
+    session_id uuid references chat_sessions(id) on delete set null,
+    customer_identifier text,
+    shopper_email text,
+    shopper_phone text,
+    order_reference text,
+    issue_summary text not null,
+    transcript_excerpt text,
+    assigned_contacts jsonb not null default '[]'::jsonb,
+    metadata jsonb not null default '{}'::jsonb,
+    notification_status text not null default 'pending',
+    status text not null default 'open',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists customer_style_profiles (
+    id uuid primary key default gen_random_uuid(),
+    merchant_id uuid not null references merchants(id) on delete cascade,
+    customer_identifier text not null,
+    customer_email text,
+    account_display_name text,
+    profiles jsonb not null default '[]'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique (merchant_id, customer_identifier)
 );
 
 create table if not exists shopify_orders (
@@ -130,6 +164,9 @@ create index if not exists idx_product_tags_product_id on product_tags(product_i
 create index if not exists idx_chat_sessions_merchant_id on chat_sessions(merchant_id);
 create index if not exists idx_chat_messages_session_id on chat_messages(session_id);
 create index if not exists idx_recommendation_events_merchant_id on recommendation_events(merchant_id);
+create index if not exists idx_support_requests_merchant_id on support_requests(merchant_id);
+create index if not exists idx_support_requests_session_id on support_requests(session_id);
+create index if not exists idx_customer_style_profiles_merchant_id on customer_style_profiles(merchant_id);
 create index if not exists idx_shopify_orders_merchant_id on shopify_orders(merchant_id);
 create index if not exists idx_shopify_orders_ai_assisted on shopify_orders(ai_assisted);
 create index if not exists idx_shopify_order_line_items_order_id on shopify_order_line_items(order_id);
