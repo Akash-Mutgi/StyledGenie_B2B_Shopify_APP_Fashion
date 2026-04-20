@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.routers.analytics import router as analytics_router
@@ -16,6 +20,10 @@ app = FastAPI(
     description="Starter API for the StyledGenie B2B Intelligence System MVP.",
 )
 
+repo_root = Path(__file__).resolve().parents[2]
+merchant_dashboard_dir = repo_root / "apps" / "merchant-dashboard"
+storefront_widget_dir = repo_root / "apps" / "storefront-widget"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,3 +38,15 @@ app.include_router(support_router)
 app.include_router(analytics_router)
 app.include_router(catalog_router)
 app.include_router(merchant_router)
+
+if merchant_dashboard_dir.exists():
+    app.mount("/merchant-dashboard", StaticFiles(directory=merchant_dashboard_dir, html=True), name="merchant-dashboard")
+
+if storefront_widget_dir.exists():
+    app.mount("/storefront-widget-demo", StaticFiles(directory=storefront_widget_dir, html=True), name="storefront-widget-demo")
+
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent.parent / "static"), name="static")
+
+@app.get("/", include_in_schema=False)
+def root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/merchant-dashboard/")
