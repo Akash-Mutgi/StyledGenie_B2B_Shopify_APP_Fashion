@@ -4558,8 +4558,8 @@
       assistant_name: defaultAssistantName,
       welcome_title: defaultWelcomeTitle,
     });
-    await loadChatbotCustomization();
     addOpeningConversation();
+    await loadChatbotCustomization();
     startCustomizationRefreshLoop();
   }
 
@@ -4567,3 +4567,7 @@
 })();
 
 /* v1776341426 */
+// updated
+// css update
+// retake fix
+// retake fix
