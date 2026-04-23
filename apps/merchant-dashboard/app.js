@@ -2249,143 +2249,61 @@ function renderBotBuilderPage(snapshot) {
 function renderOverviewSection() {
   const snapshot = workspace.overview;
   const profile = workspace.profile;
-  const aiStack = workspace.ai_stack;
-
-  return `
-    <section class="section-stack">
-      <div class="metric-grid">
-        ${renderMetricCards(snapshot)}
-      </div>
-
-      <div class="panel-grid panel-grid-overview">
-        <article class="workspace-card workspace-card-wide">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Store Brain</p>
-              <h3>Connected Store Profile</h3>
-              <p class="card-copy">
-                This profile is the control layer for any merchant connected to the StyledGenie intelligence system.
-              </p>
-            </div>
-            <span class="inline-badge">Analytics &amp; KPI live</span>
-          </div>
-
-          <form id="profileForm" class="section-form">
-            <div class="form-grid">
-              <label class="field">
-                <span>Brand Name</span>
-                <input name="brand_name" value="${escapeHtml(profile.brand_name)}" />
-              </label>
-
-              <label class="field">
-                <span>Connected Shopify Domain</span>
-                <input
-                  name="connected_store_domain"
-                  value="${escapeHtml(profile.connected_store_domain)}"
-                />
-              </label>
-
-              <label class="field">
-                <span>Storefront Domain</span>
-                <input name="storefront_domain" value="${escapeHtml(profile.storefront_domain)}" />
-              </label>
-
-              <label class="field">
-                <span>Industry</span>
-                <input name="industry" value="${escapeHtml(profile.industry)}" />
-              </label>
-
-              <label class="field field-full">
-                <span>Brand Summary</span>
-                <textarea name="brand_summary" rows="4">${escapeHtml(profile.brand_summary)}</textarea>
-              </label>
-
-              <label class="field field-full">
-                <span>Merchandising Goal</span>
-                <textarea name="merchandising_goal" rows="3">${escapeHtml(
-                  profile.merchandising_goal
-                )}</textarea>
-              </label>
-            </div>
-
-            <div class="form-actions">
-              <button class="primary-button" type="submit">Save Store Profile</button>
-            </div>
-          </form>
-        </article>
-
-        <article class="workspace-card">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Recommendation Engine</p>
-              <h3>Top Styling Services</h3>
-            </div>
-          </div>
-          <div class="service-list">
-            ${renderServiceMix(snapshot)}
-          </div>
-        </article>
-
-        ${renderFeedbackSignals(snapshot)}
-
-        <article class="workspace-card workspace-card-wide">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Live Catalog</p>
-              <h3>AI Recommended Products</h3>
-              <p class="card-copy">Real items from the connected store that are ready for styling recommendations.</p>
-            </div>
-          </div>
-          <div class="list-stack">
-            ${renderRecommendedProducts(snapshot)}
-          </div>
-        </article>
-
-        <article class="workspace-card">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Brain Health</p>
-              <h3>Operational Readiness</h3>
-            </div>
-          </div>
-          <div class="detail-list">
-            <div class="detail-row"><span>Imported Products</span><strong>${formatNumber(
-              snapshot.products_imported
-            )}</strong></div>
-            <div class="detail-row"><span>Curated Looks</span><strong>${formatNumber(
-              snapshot.curated_looks
-            )}</strong></div>
-            <div class="detail-row"><span>FAQ Entries</span><strong>${formatNumber(
-              snapshot.faq_entries
-            )}</strong></div>
-            <div class="detail-row"><span>Knowledge Entries</span><strong>${formatNumber(
-              snapshot.knowledge_entries
-            )}</strong></div>
-            <div class="detail-row"><span>Last Catalog Sync</span><strong>${escapeHtml(
-              formatTimestamp(snapshot.last_catalog_sync)
-            )}</strong></div>
-          </div>
-        </article>
-
-        ${renderShopifySetupCheckCard()}
-
-        ${renderAiStackCard(aiStack)}
-
-        <article class="workspace-card workspace-card-full">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Recent Activity</p>
-              <h3>Latest AI Sessions</h3>
-            </div>
-          </div>
-          <div class="activity-stack">
-            ${renderActivityFeed(snapshot)}
-          </div>
-        </article>
-      </div>
-    </section>
-  `;
+  const untagged = Math.max(0, (snapshot.products_imported || 0) - (snapshot.tagged_products || 0));
+  const coverage = getCoverage(snapshot);
+  const addToCart = snapshot.add_to_cart_count || 0;
+  const deflections = snapshot.overview.support_questions_answered || 0;
+  const outfits = snapshot.overview.outfit_recommendations || 0;
+  const imageUploads = snapshot.overview.image_uploads || 0;
+  const completeLook = snapshot.complete_look_count || 0;
+  const totalConversations = snapshot.overview.chat_interactions || 0;
+  const totalFeatureUsage = outfits + imageUploads + completeLook + deflections || 1;
+  function pct(val) { return Math.max(1, Math.round((val / totalFeatureUsage) * 100)); }
+  const alertBar = untagged > 0 ? '<div style="background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:.65rem 1rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem"><span style="font-size:13px;color:#633806">' + escapeHtml(String(untagged)) + ' products have missing tags — the AI stylist may return incomplete results for these items.</span><button class="sg-alert-action" style="font-size:12px;font-weight:500;color:#854F0B;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0" data-nav="catalog">Fix in Catalog \u2192</button></div>' : "";
+  const healthRows = [
+    { label: "Chatbot live", status: "green", pill: "Online" },
+    { label: "Catalog synced", status: "green", pill: snapshot.last_catalog_sync ? formatTimestamp(snapshot.last_catalog_sync) : "Never" },
+    { label: "Product coverage", status: coverage >= 80 ? "green" : coverage >= 50 ? "amber" : "red", pill: coverage + "% tagged" },
+    { label: "Brand profile", status: (profile && profile.brand_name) ? "green" : "amber", pill: (profile && profile.brand_name) ? "Configured" : "Incomplete" },
+    { label: "Looks created", status: snapshot.curated_looks > 0 ? "green" : "amber", pill: formatNumber(snapshot.curated_looks) + " published" },
+    { label: "Care setup", status: snapshot.faq_entries > 0 ? "green" : "red", pill: snapshot.faq_entries > 0 ? "Configured" : "Not configured" },
+  ];
+  const dotColor = { green: "#1D9E75", amber: "#EF9F27", red: "#E24B4A" };
+  const pillStyle = { green: "background:#EAF3DE;color:#3B6D11", amber: "background:#FAEEDA;color:#854F0B", red: "background:#FCEBEB;color:#A32D2D" };
+  const healthHTML = healthRows.map(function(row) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="font-size:13px;color:var(--color-text-secondary)"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor[row.status] + ';margin-right:6px"></span>' + escapeHtml(row.label) + '</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;' + pillStyle[row.status] + '">' + escapeHtml(row.pill) + '</span></div>';
+  }).join("");
+  const featureBars = [
+    { label: "Full outfit creation", value: outfits, color: "#1D9E75" },
+    { label: "Complete my look", value: completeLook, color: "#378ADD" },
+    { label: "Get inspired", value: imageUploads, color: "#7F77DD" },
+    { label: "Customer care", value: deflections, color: "#888780" },
+  ].map(function(row) {
+    return '<div style="margin-bottom:.7rem"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:.3rem"><span>' + escapeHtml(row.label) + '</span><span>' + formatNumber(row.value) + '</span></div><div style="height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden"><div style="height:100%;width:' + pct(row.value) + '%;background:' + row.color + ';border-radius:3px"></div></div></div>';
+  }).join("");
+  const activityHTML = snapshot.recent_activity && snapshot.recent_activity.length
+    ? snapshot.recent_activity.slice(0, 5).map(function(item) {
+        const outcome = item.outcome || "";
+        const op = outcome === "cart" ? "background:#EAF3DE;color:#3B6D11" : outcome === "care" ? "background:#FAEEDA;color:#854F0B" : "background:var(--color-background-secondary);color:var(--color-text-secondary)";
+        const ol = outcome === "cart" ? "Added to cart" : outcome === "care" ? "Needs human" : "Browsed only";
+        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.5rem 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div><p style="font-size:13px;color:var(--color-text-primary);margin:0 0 3px">' + escapeHtml(item.title) + '</p><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;' + op + '">' + ol + '</span></div><p style="font-size:11px;color:var(--color-text-tertiary);white-space:nowrap;margin-left:12px;padding-top:2px">' + escapeHtml(formatTimestamp(item.timestamp)) + '</p></div>';
+      }).join("")
+    : '<p class="empty-copy">No AI activity recorded yet.</p>';
+  const checklistItems = [
+    { label: "Catalog synced", done: snapshot.products_imported > 0 },
+    { label: "Brand profile configured", done: !!(profile && profile.brand_name) },
+    { label: "Chatbot customized", done: !!(workspace.chatbot_customization && workspace.chatbot_customization.assistant_name) },
+    { label: "Tag remaining " + untagged + " products", done: untagged === 0 },
+    { label: "Create your first curated look", done: snapshot.curated_looks > 0 },
+    { label: "Configure customer care responses", done: snapshot.faq_entries > 0 },
+    { label: "Add FAQ entries for top queries", done: snapshot.faq_entries >= 3 },
+  ];
+  const checklistHTML = checklistItems.map(function(item) {
+    return '<div style="display:flex;align-items:center;gap:8px;padding:.4rem 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div style="width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;' + (item.done ? "background:#EAF3DE;color:#3B6D11" : "background:var(--color-background-secondary);color:var(--color-text-tertiary);border:0.5px solid var(--color-border-tertiary)") + '">' + (item.done ? "\u2713" : "") + '</div><span style="font-size:13px;' + (item.done ? "text-decoration:line-through;color:var(--color-text-tertiary)" : "color:var(--color-text-secondary)") + '">' + escapeHtml(item.label) + '</span></div>';
+  }).join("");
+  return '<section class="section-stack">' + alertBar + '<p style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-tertiary);margin-bottom:.6rem">AI performance \u2014 last 30 days</p><div class="metric-grid" style="margin-bottom:1.5rem"><article class="metric-card"><div class="metric-badge">' + formatNumber(snapshot.chat_sessions || 0) + ' live styling sessions</div><p class="metric-label">Conversations</p><h3 class="metric-value">' + formatNumber(totalConversations) + '</h3></article><article class="metric-card"><div class="metric-badge">direct revenue signal</div><p class="metric-label">Add-to-cart from AI</p><h3 class="metric-value">' + formatNumber(addToCart) + '</h3></article><article class="metric-card"><div class="metric-badge">' + Math.round(totalConversations ? (outfits / totalConversations) * 100 : 0) + '% of all sessions</div><p class="metric-label">Outfits built</p><h3 class="metric-value">' + formatNumber(outfits) + '</h3></article><article class="metric-card"><div class="metric-badge">tickets avoided</div><p class="metric-label">Care deflections</p><h3 class="metric-value">' + formatNumber(deflections) + '</h3></article></div><div class="panel-grid panel-grid-overview"><article class="workspace-card"><div class="card-header"><div><h3>Store health</h3></div></div><div>' + healthHTML + '</div></article><article class="workspace-card"><div class="card-header"><div><h3>Feature usage</h3></div></div><div style="padding-top:.25rem">' + featureBars + '</div></article><article class="workspace-card"><div class="card-header"><div><h3>Recent activity</h3></div></div><div>' + activityHTML + '</div></article><article class="workspace-card"><div class="card-header"><div><h3>Setup checklist</h3></div></div><div>' + checklistHTML + '</div></article></div></section>';
 }
+
 
 function renderShopifySetupCheckCard() {
   const checks = Array.isArray(shopifyCapabilities.setup_checks) ? shopifyCapabilities.setup_checks : [];
