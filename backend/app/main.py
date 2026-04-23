@@ -47,6 +47,17 @@ if storefront_widget_dir.exists():
 
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent.parent / "static"), name="static")
 
+@app.get("/debug-paths", include_in_schema=False)
+async def debug_paths():
+    import os
+    return {
+        "repo_root": str(repo_root),
+        "merchant_dashboard_dir": str(merchant_dashboard_dir),
+        "exists": merchant_dashboard_dir.exists(),
+        "cwd": os.getcwd(),
+        "listdir_repo": os.listdir(repo_root) if repo_root.exists() else "repo_root missing",
+    }
+
 @app.get("/", include_in_schema=False)
 def root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/merchant-dashboard/")
