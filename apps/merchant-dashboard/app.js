@@ -10,7 +10,7 @@ const toastTitle = document.getElementById("toastTitle");
 const toastMessage = document.getElementById("toastMessage");
 const toastCloseButton = document.getElementById("toastCloseButton");
 const navButtons = Array.from(document.querySelectorAll(".nav-button"));
-const apiBaseUrl = "http://127.0.0.1:8000";
+const apiBaseUrl = resolveApiBaseUrl();
 
 const sectionMeta = {
   overview: {
@@ -68,6 +68,23 @@ const chatbotTargetMarkets = [
   "Global",
 ];
 
+const recommendationStrictnessOptions = [
+  "Balanced",
+  "Strict brand alignment",
+  "Higher conversion focus",
+  "More exploratory",
+];
+
+const taggingModeOptions = [
+  "Review only",
+  "Auto-apply safe fields",
+];
+
+const descriptionWriteModeOptions = [
+  "Review only",
+  "Auto-apply short description",
+];
+
 let workspace = null;
 let activeSection = "overview";
 let activeChatbotPage = "settings";
@@ -80,6 +97,47 @@ const analyticsRefreshIntervalMs = 5000;
 let builderPreviewFlow = "outfit_curation";
 let builderPreviewPrompt = "";
 let builderPriorityFlow = "";
+let catalogProductOptions = [];
+let selectedDescriptionProductId = "";
+let productDescriptionDraft = null;
+let selectedLookBuilderHeroId = "";
+let lookBuilderOccasionHint = "";
+let shopifyCapabilities = {
+  write_products_ready: false,
+  granted_scopes: [],
+  message: "",
+  api_base_url: "",
+  setup_checks: [],
+};
+let catalogIntelligenceSuggestions = null;
+let catalogSuggestionsLoading = false;
+
+function stripTrailingSlash(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function resolveApiBaseUrl() {
+  const queryValue = new URLSearchParams(window.location.search).get("api_base");
+  const bodyValue = document.body ? document.body.dataset.apiBase : "";
+  const metaTag = document.querySelector('meta[name="styledgenie-api-base"]');
+  const metaValue = metaTag ? metaTag.content : "";
+  const globalValue =
+    typeof window.STYLEDGENIE_API_BASE === "string" ? window.STYLEDGENIE_API_BASE : "";
+
+  const configuredBase = [queryValue, bodyValue, metaValue, globalValue]
+    .map((value) => stripTrailingSlash(value))
+    .find(Boolean);
+
+  if (configuredBase) {
+    return configuredBase;
+  }
+
+  if (window.location && /^https?:/i.test(window.location.origin || "")) {
+    return stripTrailingSlash(window.location.origin);
+  }
+
+  return "http://127.0.0.1:8000";
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -88,6 +146,52 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function getFriendlyApplyErrorMessage(message) {
+  const normalized = String(message || "").toLowerCase();
+  if (normalized.includes("write_products")) {
+    return "Shopify has not approved product write access yet. Add `write_products` to the app version, release it, then update or reinstall the app on this store before applying descriptions.";
+  }
+
+  return message || "Please try again.";
+}
+
+function renderCatalogSuggestionButtons(fieldKey, fieldData) {
+  if (!fieldData || !Array.isArray(fieldData.options) || !fieldData.options.length) {
+    return '<p class="empty-copy">No suggestions generated yet.</p>';
+  }
+
+  return fieldData.options
+    .map(
+      (option) => `
+        <button
+          class="catalog-suggestion-chip"
+          type="button"
+          data-action="apply-catalog-suggestion"
+          data-field="${escapeHtml(fieldKey)}"
+          data-value="${escapeHtml(encodeURIComponent(option))}"
+        >
+          ${escapeHtml(option)}
+        </button>
+      `
+    )
+    .join("");
+}
+
+function renderCatalogSuggestionCard(fieldKey, title, fieldData) {
+  return `
+    <article class="catalog-suggestion-card">
+      <div class="catalog-suggestion-head">
+        <strong>${escapeHtml(title)}</strong>
+        <span class="inline-badge">Click to apply</span>
+      </div>
+      <p class="catalog-suggestion-helper">${escapeHtml((fieldData && fieldData.helper) || "")}</p>
+      <div class="catalog-suggestion-chip-row">
+        ${renderCatalogSuggestionButtons(fieldKey, fieldData)}
+      </div>
+    </article>
+  `;
 }
 
 function setStatus(text, tone = "neutral") {
@@ -236,6 +340,24 @@ function renderSelectOptions(options, selectedValue) {
       `
     )
     .join("");
+}
+
+function renderProductOptionTags(options, selectedValue, placeholder = "Select a product") {
+  const normalizedSelectedValue = String(selectedValue || "");
+  const optionMarkup = (options || [])
+    .map(
+      (item) => `
+        <option value="${escapeHtml(item.id)}"${item.id === normalizedSelectedValue ? " selected" : ""}>
+          ${escapeHtml(item.title)}${item.category ? ` · ${escapeHtml(item.category)}` : ""}
+        </option>
+      `
+    )
+    .join("");
+
+  return `
+    <option value="">${escapeHtml(placeholder)}</option>
+    ${optionMarkup}
+  `;
 }
 
 function getChatbotFingerprint(payload) {
@@ -578,14 +700,14 @@ function buildUsageShareRows(snapshot) {
 
 function buildIntentMix(snapshot) {
   const items = [
-    { label: "Inspiration", value: snapshot.overview.image_uploads, color: "#7adce3" },
-    { label: "Occasion Styling", value: snapshot.overview.outfit_recommendations, color: "#44b4d5" },
-    { label: "Compare Products", value: snapshot.overview.support_questions_answered, color: "#3d7bb5" },
-    { label: "Order Support", value: snapshot.chat_sessions, color: "#536d9a" },
+    { label: "Inspiration", value: snapshot.overview.image_uploads, color: "#1f1f1f" },
+    { label: "Occasion Styling", value: snapshot.overview.outfit_recommendations, color: "#4b4b4b" },
+    { label: "Compare Products", value: snapshot.overview.support_questions_answered, color: "#737373" },
+    { label: "Order Support", value: snapshot.chat_sessions, color: "#9a9a9a" },
     {
       label: "Returns & Logistics",
       value: Math.max(1, Math.round(snapshot.overview.support_questions_answered / 2)),
-      color: "#624b8d",
+      color: "#c2c2c2",
     },
   ];
 
@@ -1256,6 +1378,43 @@ function buildSettingsPulse(snapshot) {
   ];
 }
 
+function renderAiStackCard(aiStack) {
+  const status = aiStack || {};
+  const langchainState = status.langchain_ready ? "Active" : "Fallback";
+  const visionState = status.vision_ready ? "Active" : "Fallback";
+  const openaiState = status.openai_ready ? "Ready" : "Needs setup";
+
+  return `
+    <article class="workspace-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">AI Status</p>
+          <h3>AI Performance Overview</h3>
+          <p class="card-copy">${escapeHtml(
+            "Track whether the connected AI systems are ready to support styling, search, and customer care."
+          )}</p>
+        </div>
+        <span class="inline-badge">${status.langchain_ready ? "AI active" : "Fallback active"}</span>
+      </div>
+      <div class="detail-list">
+        <div class="detail-row"><span>Language intelligence</span><strong>${escapeHtml(openaiState)}</strong></div>
+        <div class="detail-row"><span>Recommendation routing</span><strong>${escapeHtml(
+          langchainState
+        )}</strong></div>
+        <div class="detail-row"><span>Commerce tools</span><strong>${escapeHtml(
+          status.langchain_tools_ready ? "Ready" : "Unavailable"
+        )}</strong></div>
+        <div class="detail-row"><span>Image understanding</span><strong>${escapeHtml(
+          visionState
+        )}</strong></div>
+        <div class="detail-row"><span>AI activity</span><strong>${escapeHtml(
+          status.image_reasoning_active ? "Active" : "Off"
+        )}</strong></div>
+      </div>
+    </article>
+  `;
+}
+
 function buildBuilderKpisAccurate(snapshot) {
   return [
     {
@@ -1522,7 +1681,7 @@ function renderChatbotAnalyticsPage(snapshot) {
                               )
                             )
                           )
-                        )}%; background:#7adce3;"></div>
+                        )}%; background:#4a4a4a;"></div>
                       </div>
                       <strong>${escapeHtml(formatNumber(item.started))}</strong>
                     </div>
@@ -2090,6 +2249,7 @@ function renderBotBuilderPage(snapshot) {
 function renderOverviewSection() {
   const snapshot = workspace.overview;
   const profile = workspace.profile;
+  const aiStack = workspace.ai_stack;
 
   return `
     <section class="section-stack">
@@ -2207,6 +2367,10 @@ function renderOverviewSection() {
           </div>
         </article>
 
+        ${renderShopifySetupCheckCard()}
+
+        ${renderAiStackCard(aiStack)}
+
         <article class="workspace-card workspace-card-full">
           <div class="card-header">
             <div>
@@ -2220,6 +2384,57 @@ function renderOverviewSection() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderShopifySetupCheckCard() {
+  const checks = Array.isArray(shopifyCapabilities.setup_checks) ? shopifyCapabilities.setup_checks : [];
+  const readyCount = checks.filter((item) => item && item.status === "live").length;
+
+  if (!checks.length) {
+    return `
+      <article class="workspace-card">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">Shopify Setup</p>
+            <h3>Storefront Readiness</h3>
+            <p class="card-copy">We could not verify the current Shopify setup checks yet.</p>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="workspace-card">
+      <div class="card-header">
+        <div>
+          <p class="card-eyebrow">Shopify Setup</p>
+          <h3>Storefront Readiness</h3>
+          <p class="card-copy">Use these checks before testing the embedded chat and customer-care flows in the dev store.</p>
+        </div>
+        <span class="status-chip ${readyCount === checks.length ? "live" : "monitor"}">
+          ${escapeHtml(`${readyCount}/${checks.length} ready`)}
+        </span>
+      </div>
+      <div class="setup-check-list">
+        ${checks
+          .map(
+            (item) => `
+              <div class="setup-check-item">
+                <div class="detail-row">
+                  <span>${escapeHtml(item.label || "Setup check")}</span>
+                  <span class="status-chip ${escapeHtml(item.status || "monitor")}">
+                    ${escapeHtml(item.state_label || "Check")}
+                  </span>
+                </div>
+                <p class="setup-check-detail">${escapeHtml(item.detail || "")}</p>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -2623,10 +2838,14 @@ function renderChatbotSection() {
 function renderCatalogSection() {
   const settings = workspace.catalog_intelligence;
   const profile = workspace.profile;
+  const descriptionTargetProduct = catalogProductOptions.find(
+    (item) => item.id === selectedDescriptionProductId
+  );
+  const suggestionFields = catalogIntelligenceSuggestions && catalogIntelligenceSuggestions.fields;
 
   return `
     <section class="section-stack">
-      <div class="panel-grid two-column">
+      <div class="panel-grid catalog-section-grid">
         <article class="workspace-card">
           <div class="card-header">
             <div>
@@ -2634,7 +2853,124 @@ function renderCatalogSection() {
               <h3>Catalog Intelligence Rules</h3>
               <p class="card-copy">Tell the system how to interpret products, prioritize attributes, and guide outfit compatibility.</p>
             </div>
+            <button
+              class="secondary-button"
+              type="button"
+              id="generateCatalogSuggestionsButton"
+              ${catalogSuggestionsLoading ? "disabled" : ""}
+            >
+              ${catalogSuggestionsLoading ? "Analyzing products..." : "Autogenerate Options"}
+            </button>
           </div>
+
+          <div class="callout-card premium-callout">
+            <p>
+              Review AI-generated rule suggestions from your synced catalog and apply the strongest options with one click.
+            </p>
+          </div>
+
+          ${
+            catalogIntelligenceSuggestions
+              ? `
+                <article class="catalog-suggestion-surface">
+                  <div class="card-header">
+                    <div>
+                      <p class="card-eyebrow">Autogenerated Options</p>
+                      <h3>Suggested Rule Sets</h3>
+                      <p class="card-copy">${escapeHtml(
+                        catalogIntelligenceSuggestions.message || "Review the generated options below."
+                      )}</p>
+                    </div>
+                    <div class="catalog-suggestion-meta">
+                      <span class="inline-badge">${escapeHtml(
+                        `${catalogIntelligenceSuggestions.products_analyzed || 0} products analyzed`
+                      )}</span>
+                      <span class="status-chip ${
+                        String(catalogIntelligenceSuggestions.vision_source || "").includes("google-vision")
+                          ? "live"
+                          : "learning"
+                      }">${escapeHtml(catalogIntelligenceSuggestions.vision_source || "fallback")}</span>
+                    </div>
+                  </div>
+
+                  <p class="catalog-suggestion-summary">${escapeHtml(
+                    catalogIntelligenceSuggestions.visual_summary || ""
+                  )}</p>
+
+                  <div class="catalog-sample-grid">
+                    ${(catalogIntelligenceSuggestions.sample_products || [])
+                      .map(
+                        (item) => `
+                          <article class="catalog-sample-card">
+                            ${
+                              item.image_url
+                                ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" />`
+                                : `<div class="catalog-sample-placeholder">${escapeHtml(
+                                    (item.title || "SG").slice(0, 2).toUpperCase()
+                                  )}</div>`
+                            }
+                            <div>
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <p>${escapeHtml(item.category || "General")}</p>
+                              <span>${escapeHtml((item.detected_signals || []).join(", ") || "Visual cues loading")}</span>
+                            </div>
+                          </article>
+                        `
+                      )
+                      .join("")}
+                  </div>
+
+                  <div class="catalog-suggestion-grid">
+                    ${renderCatalogSuggestionCard(
+                      "target_customer",
+                      "Target Customer",
+                      suggestionFields && suggestionFields.target_customer
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "brand_positioning",
+                      "Brand Positioning",
+                      suggestionFields && suggestionFields.brand_positioning
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "priority_tags",
+                      "Priority Tags",
+                      suggestionFields && suggestionFields.priority_tags
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "compatibility_rules",
+                      "Compatibility Rules",
+                      suggestionFields && suggestionFields.compatibility_rules
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "seasonal_focus",
+                      "Seasonal Focus",
+                      suggestionFields && suggestionFields.seasonal_focus
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "fit_guidance",
+                      "Fit Guidance",
+                      suggestionFields && suggestionFields.fit_guidance
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "recommendation_strictness",
+                      "Recommendation Strictness",
+                      suggestionFields && suggestionFields.recommendation_strictness
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "product_priority_rules",
+                      "Product Priority Rules",
+                      suggestionFields && suggestionFields.product_priority_rules
+                    )}
+                    ${renderCatalogSuggestionCard(
+                      "forbidden_recommendation_types",
+                      "Forbidden Recommendation Types",
+                      suggestionFields && suggestionFields.forbidden_recommendation_types
+                    )}
+                  </div>
+                </article>
+              `
+              : ""
+          }
 
           <form id="catalogForm" class="section-form">
             <div class="form-grid">
@@ -2679,6 +3015,47 @@ function renderCatalogSection() {
                   settings.fit_guidance
                 )}</textarea>
               </label>
+
+              <label class="field">
+                <span>Recommendation Strictness</span>
+                <select name="recommendation_strictness">
+                  ${renderSelectOptions(
+                    recommendationStrictnessOptions,
+                    settings.recommendation_strictness
+                  )}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Tagging Mode</span>
+                <select name="tagging_mode">
+                  ${renderSelectOptions(taggingModeOptions, settings.tagging_mode)}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Description Write Mode</span>
+                <select name="description_write_mode">
+                  ${renderSelectOptions(
+                    descriptionWriteModeOptions,
+                    settings.description_write_mode
+                  )}
+                </select>
+              </label>
+
+              <label class="field field-full">
+                <span>Product Priority Rules</span>
+                <textarea name="product_priority_rules" rows="3">${escapeHtml(
+                  settings.product_priority_rules
+                )}</textarea>
+              </label>
+
+              <label class="field field-full">
+                <span>Forbidden Recommendation Types</span>
+                <textarea name="forbidden_recommendation_types" rows="3">${escapeHtml(
+                  settings.forbidden_recommendation_types
+                )}</textarea>
+              </label>
             </div>
 
             <div class="form-actions">
@@ -2687,42 +3064,161 @@ function renderCatalogSection() {
           </form>
         </article>
 
-        <article class="workspace-card">
-          <div class="card-header">
-            <div>
-              <p class="card-eyebrow">Connection View</p>
-              <h3>Store Intelligence Status</h3>
+        <div class="catalog-side-rail">
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">Connection View</p>
+                <h3>Store Intelligence Status</h3>
+              </div>
             </div>
-          </div>
 
-          <div class="detail-list">
-            <div class="detail-row"><span>Brand</span><strong>${escapeHtml(
-              profile.brand_name
-            )}</strong></div>
-            <div class="detail-row"><span>Shopify Domain</span><strong>${escapeHtml(
-              profile.connected_store_domain
-            )}</strong></div>
-            <div class="detail-row"><span>Storefront</span><strong>${escapeHtml(
-              profile.storefront_domain
-            )}</strong></div>
-            <div class="detail-row"><span>Products Imported</span><strong>${formatNumber(
-              workspace.overview.products_imported
-            )}</strong></div>
-            <div class="detail-row"><span>Distinct Styling Tags</span><strong>${formatNumber(
-              workspace.overview.styling_tags
-            )}</strong></div>
-            <div class="detail-row"><span>Last Sync</span><strong>${escapeHtml(
-              formatTimestamp(workspace.overview.last_catalog_sync)
-            )}</strong></div>
-          </div>
+            <div class="detail-list">
+              <div class="detail-row"><span>Brand</span><strong>${escapeHtml(
+                profile.brand_name
+              )}</strong></div>
+              <div class="detail-row"><span>Shopify Domain</span><strong>${escapeHtml(
+                profile.connected_store_domain
+              )}</strong></div>
+              <div class="detail-row"><span>Storefront</span><strong>${escapeHtml(
+                profile.storefront_domain
+              )}</strong></div>
+              <div class="detail-row"><span>Products Imported</span><strong>${formatNumber(
+                workspace.overview.products_imported
+              )}</strong></div>
+              <div class="detail-row"><span>Distinct Styling Tags</span><strong>${formatNumber(
+                workspace.overview.styling_tags
+              )}</strong></div>
+              <div class="detail-row"><span>Last Sync</span><strong>${escapeHtml(
+                formatTimestamp(workspace.overview.last_catalog_sync)
+              )}</strong></div>
+            </div>
 
-          <div class="callout-card">
-            <p>
-              Once a store is connected, this workspace becomes the operating brain for recommendations, styling rules,
-              customer care, and brand training.
-            </p>
-          </div>
-        </article>
+            <div class="callout-card">
+              <p>
+                Once a store is connected, this workspace becomes the operating brain for recommendations, styling rules,
+                customer care, and brand training.
+              </p>
+            </div>
+          </article>
+
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">AI Content Studio</p>
+                <h3>Product Description Drafting</h3>
+                <p class="card-copy">Generate concise fashion-commerce copy from the synced Shopify product data and your merchant rules.</p>
+              </div>
+              <div class="card-header-actions">
+                <span class="inline-badge">${escapeHtml(settings.description_write_mode)}</span>
+                <span class="status-chip ${shopifyCapabilities.write_products_ready ? "live" : "needs-setup"}">
+                  ${escapeHtml(shopifyCapabilities.write_products_ready ? "Apply ready" : "Scope needed")}
+                </span>
+              </div>
+            </div>
+
+            <form id="descriptionGeneratorForm" class="section-form">
+              <div class="form-grid">
+                <label class="field field-full">
+                  <span>Choose Product</span>
+                  <select name="description_product_id" id="descriptionProductSelect">
+                    ${renderProductOptionTags(catalogProductOptions, selectedDescriptionProductId, "Select a synced product")}
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-actions split-actions">
+                <button class="secondary-button" type="submit">Generate Draft</button>
+                <button
+                  class="primary-button"
+                  type="button"
+                  id="applyDescriptionButton"
+                  ${
+                    productDescriptionDraft && productDescriptionDraft.draft && shopifyCapabilities.write_products_ready
+                      ? ""
+                      : "disabled"
+                  }
+                >
+                  Apply To Shopify
+                </button>
+              </div>
+            </form>
+
+            <div class="callout-card">
+              ${
+                !shopifyCapabilities.write_products_ready
+                  ? `
+                    <p><strong>Shopify approval needed before apply</strong></p>
+                    <p>${escapeHtml(
+                      shopifyCapabilities.message ||
+                        "Add `write_products` to the app and approve the updated install before pushing descriptions live."
+                    )}</p>
+                    <p class="field-hint">Current scopes: ${escapeHtml(
+                      shopifyCapabilities.granted_scopes.length
+                        ? shopifyCapabilities.granted_scopes.join(", ")
+                        : "Not available"
+                    )}</p>
+                  `
+                  : ""
+              }
+              ${
+                productDescriptionDraft && productDescriptionDraft.draft
+                  ? `
+                    <p><strong>${escapeHtml(productDescriptionDraft.product_title)}</strong></p>
+                    <p>${escapeHtml(productDescriptionDraft.draft)}</p>
+                    <p class="field-hint">${escapeHtml(
+                      productDescriptionDraft.applied_to_shopify
+                        ? "This draft has already been applied to Shopify."
+                        : shopifyCapabilities.write_products_ready
+                          ? "Review the draft first. Apply pushes it to the connected Shopify product description."
+                          : "Review the draft first. Apply unlocks after Shopify approves `write_products` for this store."
+                    )}</p>
+                  `
+                  : `
+                    <p>Select a synced product to generate a polished description draft using the current brand tone and catalog intelligence settings.</p>
+                  `
+              }
+            </div>
+          </article>
+
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">AI Insights</p>
+                <h3>Catalog readiness for recommendations</h3>
+                <p class="card-copy">These signals show how ready the connected catalog is for styling, search, and description generation.</p>
+              </div>
+            </div>
+
+            <div class="detail-list">
+              <div class="detail-row"><span>Draft target</span><strong>${escapeHtml(
+                descriptionTargetProduct ? descriptionTargetProduct.title : "No product selected"
+              )}</strong></div>
+              <div class="detail-row"><span>Products with styling tags</span><strong>${formatNumber(
+                workspace.overview.tagged_products
+              )}</strong></div>
+              <div class="detail-row"><span>Distinct styling tags</span><strong>${formatNumber(
+                workspace.overview.styling_tags
+              )}</strong></div>
+              <div class="detail-row"><span>Catalog coverage</span><strong>${escapeHtml(
+                `${getCoverage(workspace.overview)}%`
+              )}</strong></div>
+            </div>
+
+            <div class="settings-chip-row">
+              ${(workspace.overview.category_metrics || [])
+                .slice(0, 6)
+                .map(
+                  (item) => `
+                    <span class="analytics-chip">${escapeHtml(
+                      `${item.label} · ${item.tagged_count}/${item.product_count}`
+                    )}</span>
+                  `
+                )
+                .join("")}
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   `;
@@ -2735,6 +3231,47 @@ function renderLooksSection() {
 
   return `
     <section class="section-stack">
+      <article class="workspace-card">
+        <div class="card-header">
+          <div>
+            <p class="card-eyebrow">AI Look Builder</p>
+            <h3>Generate curated looks from a hero product</h3>
+            <p class="card-copy">Choose a synced Shopify product, generate 2 to 3 full-look drafts, then edit and save them below.</p>
+          </div>
+        </div>
+
+        <form id="lookBuilderForm" class="section-form">
+          <div class="form-grid">
+            <label class="field">
+              <span>Hero Product</span>
+              <select name="look_builder_product_id" id="lookBuilderProductSelect">
+                ${renderProductOptionTags(catalogProductOptions, selectedLookBuilderHeroId, "Select a hero product")}
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Occasion Hint</span>
+              <input
+                id="lookBuilderOccasionInput"
+                name="look_builder_occasion_hint"
+                value="${escapeHtml(lookBuilderOccasionHint)}"
+                placeholder="Smart casual dinner, office, weekend, event..."
+              />
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="secondary-button" type="submit">Generate Look Drafts</button>
+          </div>
+        </form>
+
+        <div class="callout-card">
+          <p>
+            Generated drafts are added straight into Look Management so you can tweak titles, occasions, and styling notes before saving.
+          </p>
+        </div>
+      </article>
+
       <article class="workspace-card">
         <div class="card-header">
           <div>
@@ -2792,6 +3329,30 @@ function renderLooksSection() {
 }
 
 function renderCustomerCareSection() {
+  const settings = workspace.customer_care_settings || {
+    support_email: "info@styledgenie.com",
+    support_phone: "",
+    handoff_message:
+      "If this still feels unresolved, email info@styledgenie.com with your order number and a short note, and a human support teammate can take it from there.",
+    order_tracking_enabled: true,
+    human_handoff_enabled: true,
+    escalation_contacts: [],
+  };
+  const contacts = settings.escalation_contacts && settings.escalation_contacts.length
+    ? settings.escalation_contacts
+    : [
+        {
+          name: "",
+          role: "Customer Care",
+          email: "",
+          phone: "",
+          timezone: "Europe/Berlin",
+          shift_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          shift_start: "09:00",
+          shift_end: "17:00",
+          active: true,
+        },
+      ];
   const items = workspace.customer_care.length
     ? workspace.customer_care
     : [{ question: "", answer: "", category: "" }];
@@ -2808,6 +3369,131 @@ function renderCustomerCareSection() {
         </div>
 
         <form id="careForm" class="section-form">
+          <div class="control-group">
+            <p class="control-group-title">Escalation &amp; Tracking</p>
+            <div class="form-grid">
+              <label class="field">
+                <span>Support Email</span>
+                <input name="support_email" value="${escapeHtml(settings.support_email || "")}" />
+              </label>
+
+              <label class="field">
+                <span>Support Phone</span>
+                <input name="support_phone" value="${escapeHtml(settings.support_phone || "")}" />
+              </label>
+
+              <label class="field">
+                <span>Order Tracking</span>
+                <select name="order_tracking_enabled">
+                  ${renderSelectOptions(
+                    ["Enabled", "Disabled"],
+                    settings.order_tracking_enabled ? "Enabled" : "Disabled"
+                  )}
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Human Handoff</span>
+                <select name="human_handoff_enabled">
+                  ${renderSelectOptions(
+                    ["Enabled", "Disabled"],
+                    settings.human_handoff_enabled ? "Enabled" : "Disabled"
+                  )}
+                </select>
+              </label>
+
+              <label class="field field-full">
+                <span>Handoff Copy</span>
+                <textarea name="handoff_message" rows="3">${escapeHtml(
+                  settings.handoff_message || ""
+                )}</textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="inline-section-head">
+              <div>
+                <p class="control-group-title">Real Support Team</p>
+                <p class="section-helper-copy">
+                  Add real teammates, their contact details, and shift timings so the chatbot can hand shoppers to the right person and notify them by email or WhatsApp when those channels are connected.
+                </p>
+              </div>
+              <button class="secondary-button" type="button" data-action="add-care-contact">Add Teammate</button>
+            </div>
+            <div class="repeater-list">
+              ${contacts
+                .map(
+                  (contact, index) => `
+                    <article class="repeater-card care-contact-item">
+                      <div class="repeater-header">
+                        <h4>Teammate ${index + 1}</h4>
+                        <button class="ghost-button" type="button" data-action="remove-care-contact" data-index="${index}">
+                          Remove
+                        </button>
+                      </div>
+
+                      <div class="form-grid">
+                        <label class="field">
+                          <span>Name</span>
+                          <input name="contact_name" value="${escapeHtml(contact.name || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Role</span>
+                          <input name="contact_role" value="${escapeHtml(contact.role || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Email</span>
+                          <input name="contact_email" value="${escapeHtml(contact.email || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Phone</span>
+                          <input name="contact_phone" value="${escapeHtml(contact.phone || "")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Timezone</span>
+                          <input name="contact_timezone" value="${escapeHtml(contact.timezone || "Europe/Berlin")}" />
+                        </label>
+
+                        <label class="field">
+                          <span>Active</span>
+                          <select name="contact_active">
+                            ${renderSelectOptions(["Enabled", "Disabled"], contact.active === false ? "Disabled" : "Enabled")}
+                          </select>
+                        </label>
+
+                        <label class="field field-full">
+                          <span>Shift Days</span>
+                          <input
+                            name="contact_shift_days"
+                            value="${escapeHtml((contact.shift_days || []).join(", "))}"
+                            placeholder="Monday, Tuesday, Wednesday"
+                          />
+                        </label>
+
+                        <label class="field">
+                          <span>Shift Start</span>
+                          <input name="contact_shift_start" value="${escapeHtml(contact.shift_start || "09:00")}" placeholder="09:00" />
+                        </label>
+
+                        <label class="field">
+                          <span>Shift End</span>
+                          <input name="contact_shift_end" value="${escapeHtml(contact.shift_end || "17:00")}" placeholder="17:00" />
+                        </label>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <div class="control-group">
+            <p class="control-group-title">FAQ Library</p>
           <div class="repeater-list">
             ${items
               .map(
@@ -2840,6 +3526,7 @@ function renderCustomerCareSection() {
                 `
               )
               .join("")}
+          </div>
           </div>
 
           <div class="form-actions split-actions">
@@ -2953,6 +3640,63 @@ function renderSection() {
   wireActiveSection();
 }
 
+async function loadCatalogProductOptions() {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/catalog/products`);
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    catalogProductOptions = payload.items || [];
+
+    if (
+      (!selectedDescriptionProductId ||
+        !catalogProductOptions.some((item) => item.id === selectedDescriptionProductId)) &&
+      catalogProductOptions.length
+    ) {
+      selectedDescriptionProductId = catalogProductOptions[0].id;
+      productDescriptionDraft = null;
+    }
+
+    if (
+      (!selectedLookBuilderHeroId ||
+        !catalogProductOptions.some((item) => item.id === selectedLookBuilderHeroId)) &&
+      catalogProductOptions.length
+    ) {
+      selectedLookBuilderHeroId = catalogProductOptions[0].id;
+    }
+  } catch (error) {
+    catalogProductOptions = [];
+  }
+}
+
+async function loadShopifyCapabilities() {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/shopify-capabilities`);
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    shopifyCapabilities = {
+      write_products_ready: Boolean(payload.write_products_ready),
+      granted_scopes: Array.isArray(payload.granted_scopes) ? payload.granted_scopes : [],
+      message: payload.message || "",
+      api_base_url: payload.api_base_url || "",
+      setup_checks: Array.isArray(payload.setup_checks) ? payload.setup_checks : [],
+    };
+  } catch (error) {
+    shopifyCapabilities = {
+      write_products_ready: false,
+      granted_scopes: [],
+      message: "Could not verify Shopify product write access.",
+      api_base_url: "",
+      setup_checks: [],
+    };
+  }
+}
+
 async function loadWorkspace(successMessage = "Workspace live") {
   setStatus("Loading workspace...", "neutral");
 
@@ -2963,6 +3707,8 @@ async function loadWorkspace(successMessage = "Workspace live") {
     }
 
     workspace = await response.json();
+    await loadCatalogProductOptions();
+    await loadShopifyCapabilities();
     lastChatbotDraftFingerprint = getChatbotFingerprint(workspace.chatbot_customization);
     lastWorkspaceSnapshotFingerprint = getWorkspaceSnapshotFingerprint(workspace);
     updateShellChrome();
@@ -3064,6 +3810,36 @@ function collectCustomerCareItems() {
   }));
 }
 
+function collectCustomerCareContacts() {
+  return Array.from(mainContent.querySelectorAll(".care-contact-item"))
+    .map((card) => ({
+      name: getFormValue(card, 'input[name="contact_name"]'),
+      role: getFormValue(card, 'input[name="contact_role"]') || "Customer Care",
+      email: getFormValue(card, 'input[name="contact_email"]'),
+      phone: getFormValue(card, 'input[name="contact_phone"]'),
+      timezone: getFormValue(card, 'input[name="contact_timezone"]') || "Europe/Berlin",
+      shift_days: getFormValue(card, 'input[name="contact_shift_days"]')
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      shift_start: getFormValue(card, 'input[name="contact_shift_start"]') || "09:00",
+      shift_end: getFormValue(card, 'input[name="contact_shift_end"]') || "17:00",
+      active: getFormValue(card, 'select[name="contact_active"]') !== "Disabled",
+    }))
+    .filter((item) => item.name || item.email || item.phone);
+}
+
+function collectCustomerCareSettings(form) {
+  return {
+    support_email: getFormValue(form, 'input[name="support_email"]'),
+    support_phone: getFormValue(form, 'input[name="support_phone"]'),
+    handoff_message: getFormValue(form, 'textarea[name="handoff_message"]'),
+    order_tracking_enabled: getFormValue(form, 'select[name="order_tracking_enabled"]') !== "Disabled",
+    human_handoff_enabled: getFormValue(form, 'select[name="human_handoff_enabled"]') !== "Disabled",
+    escalation_contacts: collectCustomerCareContacts(),
+  };
+}
+
 function collectKnowledgeItems() {
   return Array.from(mainContent.querySelectorAll(".knowledge-item")).map((card) => ({
     title: getFormValue(card, 'input[name="title"]'),
@@ -3130,11 +3906,11 @@ function updateChatbotPreviewFromForm(form) {
   const previewPrompts = document.getElementById("chatbotPreviewPrompts");
 
   if (previewShell) {
-    previewShell.style.setProperty("--bot-primary", draft.primary_color || "#d8cfbd");
-    previewShell.style.setProperty("--bot-accent", draft.accent_color || "#1d2430");
-    previewShell.style.setProperty("--bot-surface", draft.surface_color || "#f7f2e7");
-    previewShell.style.setProperty("--bot-bubble", draft.bubble_color || "#d8cfbd");
-    previewShell.style.setProperty("--bot-text", draft.text_color || "#171717");
+    previewShell.style.setProperty("--bot-primary", draft.primary_color || "#e6e6e6");
+    previewShell.style.setProperty("--bot-accent", draft.accent_color || "#111111");
+    previewShell.style.setProperty("--bot-surface", draft.surface_color || "#f4f4f4");
+    previewShell.style.setProperty("--bot-bubble", draft.bubble_color || "#e6e6e6");
+    previewShell.style.setProperty("--bot-text", draft.text_color || "#111111");
     previewShell.style.setProperty(
       "--preview-heading-font",
       draft.heading_font || "Playfair Display"
@@ -3290,6 +4066,14 @@ function collectCatalogPayload(form) {
     compatibility_rules: getFormValue(form, 'textarea[name="compatibility_rules"]'),
     seasonal_focus: getFormValue(form, 'textarea[name="seasonal_focus"]'),
     fit_guidance: getFormValue(form, 'textarea[name="fit_guidance"]'),
+    recommendation_strictness: getFormValue(form, 'select[name="recommendation_strictness"]'),
+    product_priority_rules: getFormValue(form, 'textarea[name="product_priority_rules"]'),
+    forbidden_recommendation_types: getFormValue(
+      form,
+      'textarea[name="forbidden_recommendation_types"]'
+    ),
+    tagging_mode: getFormValue(form, 'select[name="tagging_mode"]'),
+    description_write_mode: getFormValue(form, 'select[name="description_write_mode"]'),
   };
 }
 
@@ -3421,6 +4205,193 @@ async function syncCatalog() {
   }
 }
 
+async function generateCatalogIntelligenceSuggestions() {
+  catalogSuggestionsLoading = true;
+  setStatus("Analyzing synced products...", "neutral");
+  renderSection();
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/catalog-intelligence-suggestions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate catalog intelligence options.");
+    }
+
+    catalogIntelligenceSuggestions = await response.json();
+    setStatus("Catalog intelligence options ready", "success");
+    renderSection();
+    showToast(
+      "Options generated",
+      "Review the suggested rule options and click any one to apply it into the form.",
+      "success"
+    );
+  } catch (error) {
+    setStatus(error.message || "Catalog intelligence generation failed", "error");
+    showToast("Autogeneration failed", error.message || "Please try again.", "error");
+  } finally {
+    catalogSuggestionsLoading = false;
+    renderSection();
+  }
+}
+
+function applyCatalogSuggestion(fieldName, value) {
+  const catalogForm = document.getElementById("catalogForm");
+  if (!catalogForm) {
+    return;
+  }
+
+  const selectorMap = {
+    target_customer: 'textarea[name="target_customer"]',
+    brand_positioning: 'textarea[name="brand_positioning"]',
+    priority_tags: 'textarea[name="priority_tags"]',
+    compatibility_rules: 'textarea[name="compatibility_rules"]',
+    seasonal_focus: 'textarea[name="seasonal_focus"]',
+    fit_guidance: 'textarea[name="fit_guidance"]',
+    recommendation_strictness: 'select[name="recommendation_strictness"]',
+    product_priority_rules: 'textarea[name="product_priority_rules"]',
+    forbidden_recommendation_types: 'textarea[name="forbidden_recommendation_types"]',
+  };
+
+  const selector = selectorMap[fieldName];
+  if (!selector) {
+    return;
+  }
+
+  const input = catalogForm.querySelector(selector);
+  if (!input) {
+    return;
+  }
+
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  showToast("Suggestion applied", "The selected option has been added to the form. Save when you’re ready.", "success");
+}
+
+async function generateProductDescriptionDraft() {
+  if (!selectedDescriptionProductId) {
+    showToast("Select a product", "Choose a synced Shopify product first.", "error");
+    return;
+  }
+
+  setStatus("Generating product description...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-draft`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_id: selectedDescriptionProductId,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate the description draft.");
+    }
+
+    productDescriptionDraft = await response.json();
+    setStatus("Description draft ready", "success");
+    renderSection();
+    showToast("Draft generated", "Review the description, then apply it to Shopify when you’re happy.", "success");
+  } catch (error) {
+    setStatus(error.message || "Description generation failed", "error");
+    showToast("Draft failed", error.message || "Please try again.", "error");
+  }
+}
+
+async function applyProductDescriptionDraft() {
+  if (!productDescriptionDraft || !productDescriptionDraft.product_id || !productDescriptionDraft.draft) {
+    showToast("No draft ready", "Generate a description draft first.", "error");
+    return;
+  }
+
+  setStatus("Applying description to Shopify...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-apply`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        product_id: productDescriptionDraft.product_id,
+        draft: productDescriptionDraft.draft,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not apply the description to Shopify.");
+    }
+
+    productDescriptionDraft = await response.json();
+    setStatus("Description applied to Shopify", "success");
+    renderSection();
+    showToast("Applied to Shopify", productDescriptionDraft.message || "The description is now live in Shopify.", "success");
+  } catch (error) {
+    const friendlyMessage = getFriendlyApplyErrorMessage(error.message);
+    setStatus(friendlyMessage || "Description apply failed", "error");
+    showToast("Apply failed", friendlyMessage || "Please try again.", "error");
+  }
+}
+
+async function generateLookBuilderDrafts() {
+  if (!selectedLookBuilderHeroId) {
+    showToast("Select a hero product", "Choose a product to build looks around first.", "error");
+    return;
+  }
+
+  setStatus("Generating merchant look drafts...", "neutral");
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/merchant/look-builder`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        hero_product_id: selectedLookBuilderHeroId,
+        occasion_hint: lookBuilderOccasionHint || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Could not generate look drafts.");
+    }
+
+    const payload = await response.json();
+    const generatedItems = payload.items || [];
+    if (!generatedItems.length) {
+      throw new Error("No look drafts were generated.");
+    }
+
+    const existingLooks = (workspace.looks || []).filter(
+      (item) => item.title || item.occasion || item.style_notes
+    );
+    workspace.looks = existingLooks.concat(generatedItems);
+    setStatus("Look drafts added to Look Management", "success");
+    activeSection = "looks";
+    renderSection();
+    showToast(
+      "Look drafts added",
+      `${generatedItems.length} AI-generated looks were added. Review and save them in Look Management.`,
+      "success"
+    );
+  } catch (error) {
+    setStatus(error.message || "Look builder failed", "error");
+    showToast("Look builder failed", error.message || "Please try again.", "error");
+  }
+}
+
 navButtons.forEach((button) => {
   button.addEventListener("click", () => {
     activeSection = button.dataset.section;
@@ -3465,7 +4436,10 @@ function wireActiveSection() {
     careForm: () =>
       saveSection(
         "/api/merchant/customer-care",
-        { items: collectCustomerCareItems() },
+        {
+          items: collectCustomerCareItems(),
+          settings: collectCustomerCareSettings(document.getElementById("careForm")),
+        },
         "Customer care setup saved"
       ),
     knowledgeForm: () =>
@@ -3498,6 +4472,67 @@ function wireActiveSection() {
     });
   }
 
+  const descriptionGeneratorForm = document.getElementById("descriptionGeneratorForm");
+  if (descriptionGeneratorForm) {
+    descriptionGeneratorForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const select = document.getElementById("descriptionProductSelect");
+      selectedDescriptionProductId = select ? select.value : selectedDescriptionProductId;
+      generateProductDescriptionDraft();
+    });
+  }
+
+  const applyDescriptionButton = document.getElementById("applyDescriptionButton");
+  if (applyDescriptionButton) {
+    applyDescriptionButton.addEventListener("click", () => {
+      applyProductDescriptionDraft();
+    });
+  }
+
+  const descriptionProductSelect = document.getElementById("descriptionProductSelect");
+  if (descriptionProductSelect) {
+    descriptionProductSelect.addEventListener("change", () => {
+      selectedDescriptionProductId = descriptionProductSelect.value;
+      if (productDescriptionDraft && productDescriptionDraft.product_id !== selectedDescriptionProductId) {
+        productDescriptionDraft = null;
+        renderSection();
+      }
+    });
+  }
+
+  const lookBuilderForm = document.getElementById("lookBuilderForm");
+  if (lookBuilderForm) {
+    lookBuilderForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const select = document.getElementById("lookBuilderProductSelect");
+      const input = document.getElementById("lookBuilderOccasionInput");
+      selectedLookBuilderHeroId = select ? select.value : selectedLookBuilderHeroId;
+      lookBuilderOccasionHint = input ? input.value.trim() : lookBuilderOccasionHint;
+      generateLookBuilderDrafts();
+    });
+  }
+
+  const lookBuilderProductSelect = document.getElementById("lookBuilderProductSelect");
+  if (lookBuilderProductSelect) {
+    lookBuilderProductSelect.addEventListener("change", () => {
+      selectedLookBuilderHeroId = lookBuilderProductSelect.value;
+    });
+  }
+
+  const lookBuilderOccasionInput = document.getElementById("lookBuilderOccasionInput");
+  if (lookBuilderOccasionInput) {
+    lookBuilderOccasionInput.addEventListener("input", () => {
+      lookBuilderOccasionHint = lookBuilderOccasionInput.value.trim();
+    });
+  }
+
+  const generateCatalogSuggestionsButton = document.getElementById("generateCatalogSuggestionsButton");
+  if (generateCatalogSuggestionsButton) {
+    generateCatalogSuggestionsButton.addEventListener("click", () => {
+      generateCatalogIntelligenceSuggestions();
+    });
+  }
+
   setupChatbotLivePreview();
 }
 
@@ -3521,6 +4556,13 @@ mainContent.addEventListener("click", (event) => {
     activeSection = trigger.dataset.target || "overview";
     updateShellChrome();
     renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "apply-catalog-suggestion") {
+    const fieldName = trigger.dataset.field || "";
+    const value = decodeURIComponent(trigger.dataset.value || "");
+    applyCatalogSuggestion(fieldName, value);
     return;
   }
 
@@ -3567,8 +4609,36 @@ mainContent.addEventListener("click", (event) => {
     return;
   }
 
+  if (trigger.dataset.action === "add-care-contact") {
+    workspace.customer_care_settings = workspace.customer_care_settings || {};
+    workspace.customer_care_settings.escalation_contacts =
+      workspace.customer_care_settings.escalation_contacts || [];
+    workspace.customer_care_settings.escalation_contacts.push({
+      name: "",
+      role: "Customer Care",
+      email: "",
+      phone: "",
+      timezone: "Europe/Berlin",
+      shift_days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      shift_start: "09:00",
+      shift_end: "17:00",
+      active: true,
+    });
+    renderSection();
+    return;
+  }
+
   if (trigger.dataset.action === "remove-care") {
     workspace.customer_care.splice(index, 1);
+    renderSection();
+    return;
+  }
+
+  if (trigger.dataset.action === "remove-care-contact") {
+    workspace.customer_care_settings = workspace.customer_care_settings || {};
+    workspace.customer_care_settings.escalation_contacts =
+      workspace.customer_care_settings.escalation_contacts || [];
+    workspace.customer_care_settings.escalation_contacts.splice(index, 1);
     renderSection();
     return;
   }
