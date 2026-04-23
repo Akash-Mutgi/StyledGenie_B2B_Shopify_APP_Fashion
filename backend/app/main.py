@@ -20,8 +20,8 @@ app = FastAPI(
     description="Starter API for the StyledGenie B2B Intelligence System MVP.",
 )
 
-repo_root = Path(__file__).resolve().parents[2]
-merchant_dashboard_dir = repo_root / "apps" / "merchant-dashboard"
+repo_root = Path(__file__).resolve().parent.parent
+merchant_dashboard_dir = repo_root / "merchant-dashboard"
 storefront_widget_dir = repo_root / "apps" / "storefront-widget"
 
 app.add_middleware(

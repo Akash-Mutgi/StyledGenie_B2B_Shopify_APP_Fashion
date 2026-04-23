@@ -252,15 +252,22 @@ class CatalogIntelligenceService:
         return sorted(cleaned)
 
     def product_bucket(self, product: dict) -> str:
-        tokens = self.tokenize(
+        category_tokens = self.tokenize(
             " ".join(
                 [
-                    product.get("title", ""),
                     product.get("category", ""),
-                    " ".join(product.get("tags", [])),
+                    product.get("product_type", ""),
                 ]
             )
         )
+        title_tokens = self.tokenize(product.get("title", ""))
+        tag_tokens = self.tokenize(" ".join(product.get("tags", [])))
+
+        for bucket, keywords in self.bucket_keywords.items():
+            if category_tokens.intersection(keywords):
+                return bucket
+
+        tokens = category_tokens.union(title_tokens).union(tag_tokens)
 
         for bucket, keywords in self.bucket_keywords.items():
             if tokens.intersection(keywords):

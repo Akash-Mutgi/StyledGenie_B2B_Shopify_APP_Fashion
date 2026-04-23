@@ -3,14 +3,18 @@ import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from app.config import settings
 from app.models.schemas import (
     AnalyticsOverview,
+    AIStackStatus,
     CatalogIntelligence,
+    CatalogProductOption,
     CategoryMetric,
     ChatbotCustomization,
     CustomerCareItem,
+    CustomerCareSettings,
     DataQualitySnapshot,
     DashboardActivityItem,
     DashboardProductItem,
@@ -22,6 +26,8 @@ from app.models.schemas import (
     MerchantWorkspaceSnapshot,
     JourneyMetric,
     ShopperFeedbackSummary,
+    SupportContact,
+    SupportRequestRecord,
 )
 
 try:
@@ -36,6 +42,7 @@ RESERVED_KNOWLEDGE_TYPES = {
     "merchant_profile",
     "chatbot_customization",
     "catalog_intelligence",
+    "customer_care_settings",
     "sync_status",
 }
 
@@ -356,6 +363,8 @@ class SupabaseService:
         if not products:
             return []
 
+        products = self._backfill_catalog_product_cards(products)
+
         product_ids = [item["id"] for item in products if item.get("id")]
         tag_map = {}
 
@@ -395,8 +404,71 @@ class SupabaseService:
 
         return normalized_products
 
+    def _backfill_catalog_product_cards(self, products: list[dict]) -> list[dict]:
+        missing_products = [
+            item
+            for item in products
+            if item.get("shopify_product_id")
+            and (not item.get("handle") or not item.get("product_url") or not item.get("shopify_variant_id"))
+        ]
+
+        if not missing_products:
+            return products
+
+        try:
+            from app.services.shopify_service import ShopifyService
+
+            details = ShopifyService().fetch_product_card_details(
+                list({str(item.get("shopify_product_id")) for item in missing_products if item.get("shopify_product_id")})
+            )
+        except Exception:
+            return products
+
+        if not details:
+            return products
+
+        client = self.get_client()
+        enriched_products: list[dict] = []
+
+        for item in products:
+            detail = details.get(item.get("shopify_product_id"), {})
+            merged_item = {
+                **item,
+                "handle": item.get("handle") or detail.get("handle"),
+                "product_url": item.get("product_url") or detail.get("product_url"),
+                "shopify_variant_id": item.get("shopify_variant_id") or detail.get("shopify_variant_id"),
+            }
+            enriched_products.append(merged_item)
+
+            if (
+                client is not None
+                and item.get("id")
+                and any(
+                    merged_item.get(key) != item.get(key)
+                    for key in ("handle", "product_url", "shopify_variant_id")
+                )
+            ):
+                try:
+                    (
+                        client.table("products")
+                        .update(
+                            {
+                                "handle": merged_item.get("handle"),
+                                "product_url": merged_item.get("product_url"),
+                                "shopify_variant_id": merged_item.get("shopify_variant_id"),
+                            }
+                        )
+                        .eq("id", item["id"])
+                        .execute()
+                    )
+                except Exception:
+                    pass
+
+        return enriched_products
+
     def fetch_workspace_snapshot(self) -> MerchantWorkspaceSnapshot:
         overview = self.fetch_dashboard_snapshot()
+        ai_stack = self._build_ai_stack_status()
         client = self.get_client()
         merchant_id = self.get_default_merchant_id()
 
@@ -407,6 +479,7 @@ class SupabaseService:
         )
         chatbot_customization = ChatbotCustomization()
         catalog_intelligence = CatalogIntelligence()
+        customer_care_settings = CustomerCareSettings()
 
         if client is None or not merchant_id:
             return MerchantWorkspaceSnapshot(
@@ -414,8 +487,10 @@ class SupabaseService:
                 profile=profile,
                 chatbot_customization=chatbot_customization,
                 catalog_intelligence=catalog_intelligence,
+                ai_stack=ai_stack,
                 looks=[],
                 customer_care=[],
+                customer_care_settings=customer_care_settings,
                 knowledge_base=[],
             )
 
@@ -464,6 +539,11 @@ class SupabaseService:
                 CatalogIntelligence(),
                 self._parse_json_body((reserved_rows.get("catalog_intelligence") or {}).get("body")),
             )
+            customer_care_settings = self._merge_model(
+                CustomerCareSettings,
+                CustomerCareSettings(),
+                self._parse_json_body((reserved_rows.get("customer_care_settings") or {}).get("body")),
+            )
 
             look_rows = (
                 client.table("curated_looks")
@@ -486,6 +566,7 @@ class SupabaseService:
                 profile=profile,
                 chatbot_customization=chatbot_customization,
                 catalog_intelligence=catalog_intelligence,
+                ai_stack=ai_stack,
                 looks=[
                     LookManagementItem(
                         id=row.get("id"),
@@ -505,6 +586,7 @@ class SupabaseService:
                     for row in faq_rows
                     if row.get("question") and row.get("answer")
                 ],
+                customer_care_settings=customer_care_settings,
                 knowledge_base=[
                     KnowledgeBaseItem(
                         id=row.get("id"),
@@ -522,8 +604,10 @@ class SupabaseService:
                 profile=profile,
                 chatbot_customization=chatbot_customization,
                 catalog_intelligence=catalog_intelligence,
+                ai_stack=ai_stack,
                 looks=[],
                 customer_care=[],
+                customer_care_settings=customer_care_settings,
                 knowledge_base=[],
             )
 
@@ -624,6 +708,101 @@ class SupabaseService:
             return True
         except Exception:
             return False
+
+    def update_customer_care_settings(self, settings_payload: CustomerCareSettings) -> bool:
+        return self._upsert_config_entry(
+            "customer_care_settings",
+            "Customer care settings",
+            settings_payload.dict(),
+        )
+
+    def fetch_catalog_product_options(self, limit: int = 250) -> list[CatalogProductOption]:
+        return [
+            CatalogProductOption(
+                id=item["id"],
+                title=item["title"],
+                category=item["category"],
+                price=str(item["price"]) if item.get("price") not in (None, "") else None,
+                image_url=item.get("image_url"),
+                product_url=item.get("product_url") or self._dashboard_product_url(item.get("handle")),
+            )
+            for item in self.fetch_catalog_products()[:limit]
+            if item.get("id")
+        ]
+
+    def find_catalog_product_by_id(self, product_id: str) -> Optional[dict]:
+        if not product_id:
+            return None
+
+        for item in self.fetch_catalog_products():
+            if item.get("id") == product_id:
+                return item
+        return None
+
+    def find_order_by_reference(self, order_reference: str, email: str) -> Optional[dict]:
+        client = self.get_client()
+        merchant_id = self.get_default_merchant_id()
+
+        if client is None or not merchant_id or not order_reference or not email:
+            return None
+
+        normalized_reference = str(order_reference).replace("#", "").strip().lower()
+        normalized_email = str(email).strip().lower()
+
+        try:
+            response = (
+                client.table("shopify_orders")
+                .select(
+                    "shopify_order_id, order_name, customer_email, ordered_at, updated_at, total_price, subtotal_price, currency_code, ai_assisted, ai_assist_modes, line_items"
+                )
+                .eq("merchant_id", merchant_id)
+                .ilike("customer_email", normalized_email)
+                .order("ordered_at", desc=True)
+                .limit(25)
+                .execute()
+            )
+        except Exception:
+            return None
+
+        for row in response.data or []:
+            order_name = str(row.get("order_name") or "").strip().lower()
+            if not order_name:
+                continue
+            comparable_name = order_name.replace("#", "")
+            if comparable_name == normalized_reference or comparable_name.endswith(normalized_reference):
+                return row
+
+        return None
+
+    def fetch_recent_order_summary(self) -> Optional[dict]:
+        client = self.get_client()
+        merchant_id = self.get_default_merchant_id()
+
+        if client is None or not merchant_id:
+            return None
+
+        try:
+            response = (
+                client.table("shopify_orders")
+                .select("order_name, customer_email, ordered_at, updated_at")
+                .eq("merchant_id", merchant_id)
+                .order("ordered_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception:
+            return None
+
+        row = (response.data or [None])[0]
+        if not row:
+            return None
+
+        return {
+            "order_name": row.get("order_name"),
+            "customer_email": row.get("customer_email"),
+            "ordered_at": row.get("ordered_at"),
+            "updated_at": row.get("updated_at"),
+        }
 
     def replace_knowledge_base_entries(self, entries: list[KnowledgeBaseItem]) -> bool:
         client = self.get_client()
@@ -917,6 +1096,25 @@ class SupabaseService:
         except Exception:
             return False
 
+    def fetch_session_messages(self, session_id: Optional[str], limit: int = 10) -> list[dict]:
+        client = self.get_client()
+
+        if client is None or not session_id:
+            return []
+
+        try:
+            response = (
+                client.table("chat_messages")
+                .select("sender, message, mode, created_at")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return list(reversed(response.data or []))
+        except Exception:
+            return []
+
     def log_recommendation_event(
         self,
         event_type: str,
@@ -942,6 +1140,168 @@ class SupabaseService:
                         "recommended_product_ids": recommended_product_ids,
                     }
                 )
+                .execute()
+            )
+            return True
+        except Exception:
+            return False
+
+    def fetch_session_events(self, session_id: Optional[str], limit: int = 12) -> list[dict]:
+        client = self.get_client()
+
+        if client is None or not session_id:
+            return []
+
+        try:
+            response = (
+                client.table("recommendation_events")
+                .select("event_type, input_summary, created_at, recommended_product_ids")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return list(reversed(response.data or []))
+        except Exception:
+            return []
+
+    def create_support_request(
+        self,
+        *,
+        session_id: Optional[str],
+        customer_identifier: Optional[str],
+        shopper_email: Optional[str],
+        shopper_phone: Optional[str],
+        order_reference: Optional[str],
+        issue_summary: str,
+        transcript_excerpt: str,
+        assigned_contacts: list[SupportContact],
+    ) -> SupportRequestRecord:
+        client = self.get_client()
+        merchant_id = self.get_default_merchant_id()
+        support_request_id = str(uuid4())
+        assigned_payload = [
+            {
+                "name": item.name,
+                "role": item.role,
+                "email": item.email,
+                "phone": item.phone,
+                "timezone": item.timezone,
+                "shift_days": item.shift_days,
+                "shift_start": item.shift_start,
+                "shift_end": item.shift_end,
+                "active": item.active,
+            }
+            for item in assigned_contacts
+        ]
+
+        if client is not None and merchant_id:
+            try:
+                (
+                    client.table("support_requests")
+                    .insert(
+                        {
+                            "id": support_request_id,
+                            "merchant_id": merchant_id,
+                            "session_id": session_id,
+                            "customer_identifier": customer_identifier,
+                            "shopper_email": shopper_email,
+                            "shopper_phone": shopper_phone,
+                            "order_reference": order_reference,
+                            "issue_summary": issue_summary,
+                            "transcript_excerpt": transcript_excerpt,
+                            "assigned_contacts": assigned_payload,
+                            "status": "open",
+                            "notification_status": "pending",
+                        }
+                    )
+                    .execute()
+                )
+                return SupportRequestRecord(
+                    id=support_request_id,
+                    status="open",
+                    persisted=True,
+                    assigned_contacts=assigned_contacts,
+                )
+            except Exception as error:
+                logger.warning("Support request insert failed. Falling back to event log. %s", error)
+
+        self.log_recommendation_event(
+            event_type="human_handoff_request",
+            input_summary=issue_summary,
+            recommended_product_ids=[],
+            session_id=session_id,
+        )
+        return SupportRequestRecord(
+            id=support_request_id,
+            status="open",
+            persisted=False,
+            assigned_contacts=assigned_contacts,
+        )
+
+    def fetch_latest_support_request(self, session_id: Optional[str]) -> Optional[dict]:
+        client = self.get_client()
+
+        if client is None or not session_id:
+            return None
+
+        try:
+            response = (
+                client.table("support_requests")
+                .select("*")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if response.data:
+                return response.data[0]
+        except Exception:
+            return None
+
+        return None
+
+    def update_support_request(
+        self,
+        support_request_id: str,
+        *,
+        shopper_email: Optional[str] = None,
+        shopper_phone: Optional[str] = None,
+        order_reference: Optional[str] = None,
+        issue_summary: Optional[str] = None,
+        transcript_excerpt: Optional[str] = None,
+        notification_status: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        client = self.get_client()
+
+        if client is None or not support_request_id:
+            return False
+
+        update_payload = {}
+        if shopper_email:
+            update_payload["shopper_email"] = shopper_email
+        if shopper_phone:
+            update_payload["shopper_phone"] = shopper_phone
+        if order_reference:
+            update_payload["order_reference"] = order_reference
+        if issue_summary:
+            update_payload["issue_summary"] = issue_summary
+        if transcript_excerpt:
+            update_payload["transcript_excerpt"] = transcript_excerpt
+        if notification_status:
+            update_payload["notification_status"] = notification_status
+        if metadata is not None:
+            update_payload["metadata"] = metadata
+
+        if not update_payload:
+            return False
+
+        try:
+            (
+                client.table("support_requests")
+                .update(update_payload)
+                .eq("id", support_request_id)
                 .execute()
             )
             return True
@@ -1191,7 +1551,11 @@ class SupabaseService:
             ) if session_rows else 0.0
             top_journey = self._top_journey_from_orders(order_rows, event_rows)
             support_question_count = len(
-                [item for item in event_rows if item.get("event_type") == "support_question"]
+                [
+                    item
+                    for item in event_rows
+                    if item.get("event_type") in {"support_question", "order_tracking", "human_handoff"}
+                ]
             )
             data_quality = self._data_quality_snapshot(
                 products=products,
@@ -1244,7 +1608,11 @@ class SupabaseService:
                         ]
                     ),
                     support_questions_answered=len(
-                        [item for item in event_rows if item.get("event_type") == "support_question"]
+                        [
+                            item
+                            for item in event_rows
+                            if item.get("event_type") in {"support_question", "order_tracking", "human_handoff"}
+                        ]
                     ),
                 ),
                 products_imported=len(products),
@@ -1282,6 +1650,50 @@ class SupabaseService:
             return float(value or 0)
         except Exception:
             return 0.0
+
+    def _build_ai_stack_status(self) -> AIStackStatus:
+        try:
+            from app.services.langchain_service import LangChainService
+            from app.services.vision_service import VisionService
+
+            langchain_status = LangChainService().runtime_status()
+            vision_status = VisionService().runtime_status()
+        except Exception as error:
+            logger.warning("AI stack status check failed. %s", error)
+            return AIStackStatus(
+                openai_ready=bool(settings.openai_api_key),
+                langchain_ready=False,
+                langchain_tools_ready=False,
+                vision_ready=False,
+                vision_mode="fallback",
+                shopper_routing_active=True,
+                support_routing_active=True,
+                image_reasoning_active=True,
+                summary="AI stack status is unavailable right now, but the fallback recommendation path is still active.",
+            )
+
+        openai_ready = bool(settings.openai_api_key)
+        summary_parts = []
+        if langchain_status.langchain_ready:
+            summary_parts.append("LangChain orchestration is live")
+        else:
+            summary_parts.append("LangChain is falling back to the direct service layer")
+        if vision_status.vision_ready:
+            summary_parts.append(f"Google Vision is active via {vision_status.vision_mode}")
+        else:
+            summary_parts.append("Google Vision is using local fallback analysis")
+
+        return AIStackStatus(
+            openai_ready=openai_ready,
+            langchain_ready=langchain_status.langchain_ready,
+            langchain_tools_ready=langchain_status.langchain_tools_ready,
+            vision_ready=vision_status.vision_ready,
+            vision_mode=vision_status.vision_mode,
+            shopper_routing_active=True,
+            support_routing_active=True,
+            image_reasoning_active=True,
+            summary=". ".join(summary_parts) + ".",
+        )
 
     def _parse_iso_datetime(self, value: Optional[str]) -> Optional[datetime]:
         if not value:
@@ -1624,6 +2036,8 @@ class SupabaseService:
             "get_inspired": "Inspiration image processed",
             "complete_the_look": "Complete-the-look suggestion sent",
             "support_question": "Support question answered",
+            "order_tracking": "Order tracking request handled",
+            "human_handoff": "Support handoff triggered",
             "feedback_love_it": "Shopper loved a recommendation",
             "feedback_show_another_option": "Shopper asked for another option",
             "feedback_make_more_casual": "Shopper requested a more casual direction",

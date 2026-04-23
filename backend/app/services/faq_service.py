@@ -1,6 +1,6 @@
 from typing import Optional
 
-from app.models.schemas import FAQItem
+from app.models.schemas import CustomerCareSettings, FAQItem
 from app.services.supabase_service import SupabaseService
 
 
@@ -69,11 +69,24 @@ class FAQService:
             short_answer += "."
         return short_answer
 
-    def _concise_policy_answer(self, lowered: str) -> Optional[str]:
+    def _concise_policy_answer(
+        self,
+        lowered: str,
+        care_settings: Optional[CustomerCareSettings] = None,
+    ) -> Optional[str]:
+        support_email = (
+            care_settings.support_email.strip()
+            if care_settings and care_settings.support_email.strip()
+            else "info@styledgenie.com"
+        )
+        support_phone = (
+            care_settings.support_phone.strip()
+            if care_settings and care_settings.support_phone.strip()
+            else "+49 17622511128"
+        )
         if "tracking" in lowered or "track order" in lowered:
             return (
-                "Type 'Track order' in the chat widget and enter your order number and email to get "
-                "real-time tracking and status updates."
+                "Tell me your order number and the email used at checkout, and I’ll check the latest order status for you."
             )
 
         if any(word in lowered for word in ["germany", "berlin", "munich", "deutschland"]) and any(
@@ -133,21 +146,25 @@ class FAQService:
 
         if any(word in lowered for word in ["damaged", "defective", "incorrect", "wrong item", "faulty"]):
             return (
-                "If your item is damaged, defective, or incorrect, email info@styledgenie.com with photos. "
+                f"If your item is damaged, defective, or incorrect, email {support_email} with photos. "
                 "We will cover return shipping and arrange a refund or replacement."
             )
 
         if any(word in lowered for word in ["contact", "support", "email", "phone"]):
             return (
-                "You can reach StyledGenie at info@styledgenie.com or call +49 17622511128. "
+                f"You can reach StyledGenie at {support_email} or call {support_phone}. "
                 "Chat support is also available 24/7 on styledgenie.com."
             )
 
         return None
 
-    def answer_question(self, message: str) -> str:
+    def answer_question(
+        self,
+        message: str,
+        care_settings: Optional[CustomerCareSettings] = None,
+    ) -> str:
         lowered = message.lower()
-        concise_answer = self._concise_policy_answer(lowered)
+        concise_answer = self._concise_policy_answer(lowered, care_settings)
         if concise_answer is not None:
             return concise_answer
 
@@ -156,10 +173,15 @@ class FAQService:
             return self._shorten_answer(best_item.answer)
 
         if any(word in lowered for word in ["return", "refund", "exchange"]):
+            support_email = (
+                care_settings.support_email.strip()
+                if care_settings and care_settings.support_email.strip()
+                else "info@styledgenie.com"
+            )
             return (
                 "Return policy: EU consumers can withdraw within 30 days of receiving an order. "
                 "Items must be unworn, unwashed, in original condition with tags attached, and shipped back "
-                "within 14 days after notifying info@styledgenie.com. Approved refunds are processed within "
+                f"within 14 days after notifying {support_email}. Approved refunds are processed within "
                 "7 to 10 business days. Direct exchanges are not offered."
             )
 
