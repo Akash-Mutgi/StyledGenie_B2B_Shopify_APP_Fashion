@@ -3630,9 +3630,7 @@ async function loadShopifyCapabilities() {
 
 async function loadWorkspace(successMessage = "Workspace live", retries = 2) {
   setStatus("Loading workspace...", "neutral");
-  const sgSkeletonCard = '<article class="workspace-card"><div style="height:14px;width:40%;background:var(--color-background-secondary);border-radius:4px;margin-bottom:1rem"></div><div style="height:10px;width:100%;background:var(--color-background-secondary);border-radius:4px;margin-bottom:8px"></div><div style="height:10px;width:80%;background:var(--color-background-secondary);border-radius:4px;margin-bottom:8px"></div><div style="height:10px;width:90%;background:var(--color-background-secondary);border-radius:4px"></div></article>';
-  const sgSkeletonMetric = '<article class="metric-card"><div style="height:12px;width:60%;background:var(--color-background-secondary);border-radius:4px;margin-bottom:8px"></div><div style="height:10px;width:40%;background:var(--color-background-secondary);border-radius:4px;margin-bottom:12px"></div><div style="height:28px;width:30%;background:var(--color-background-secondary);border-radius:4px"></div></article>';
-  mainContent.innerHTML = '<section class="section-stack"><div class="metric-grid" style="margin-bottom:1.5rem">' + sgSkeletonMetric.repeat(4) + '</div><div class="panel-grid panel-grid-overview">' + sgSkeletonCard.repeat(4) + '</div></section>';
+  mainContent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:60vh"><div class="sg-spinner"></div></div>';
 
   try {
     const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
