@@ -3537,6 +3537,7 @@ function renderSection() {
   }
 
   if (activeSection === "overview") {
+    mainContent.innerHTML = renderOverviewSection();
     requestAnimationFrame(function() { initOverviewCharts(workspace.overview); });
     wireActiveSection();
     return;
