@@ -3627,7 +3627,7 @@ async function loadShopifyCapabilities() {
   }
 }
 
-async function loadWorkspace(successMessage = "Workspace live") {
+async function loadWorkspace(successMessage = "Workspace live", retries = 2) {
   setStatus("Loading workspace...", "neutral");
 
   try {
@@ -3645,6 +3645,10 @@ async function loadWorkspace(successMessage = "Workspace live") {
     renderSection();
     setStatus(successMessage, "success");
   } catch (error) {
+    if (retries > 0) {
+      await new Promise(function(r) { setTimeout(r, 1500); });
+      return loadWorkspace(successMessage, retries - 1);
+    }
     setStatus("Backend not reachable", "error");
     showToast(
       "Backend unavailable",
