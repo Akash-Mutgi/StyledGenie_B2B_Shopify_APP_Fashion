@@ -2439,3 +2439,12 @@ textarea {
     grid-column: auto;
   }
 }
+
+@keyframes sg-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.metric-card div[style*="background:var(--color-background-secondary)"],
+.workspace-card div[style*="background:var(--color-background-secondary)"] {
+  animation: sg-skeleton-pulse 1.5s ease-in-out infinite;
+}
