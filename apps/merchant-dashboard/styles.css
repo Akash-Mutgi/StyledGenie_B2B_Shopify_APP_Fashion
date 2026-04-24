@@ -2460,3 +2460,8 @@ textarea {
   border-radius: 50%;
   animation: sg-spin 0.8s linear infinite;
 }
+
+.sg-toggle{width:36px;height:20px;border-radius:10px;background:#1D9E75;position:relative;cursor:pointer;flex-shrink:0;transition:background .2s}
+.sg-toggle.off{background:#ccc}
+.sg-toggle::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:white;top:3px;right:3px;transition:right .15s}
+.sg-toggle.off::after{right:19px}

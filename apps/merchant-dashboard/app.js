@@ -3404,6 +3404,7 @@ function renderSection() {
   if (activeSection === "chatbot") {
     mainContent.innerHTML = renderChatbotSection();
     wireActiveSection();
+    wireActiveSection();
     return;
   }
 
