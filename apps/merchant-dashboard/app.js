@@ -4473,6 +4473,14 @@ function wireActiveSection() {
 }
 
 mainContent.addEventListener("click", (event) => {
+  const navTrigger = event.target.closest("[data-nav]");
+  if (navTrigger) {
+    activeSection = navTrigger.dataset.nav;
+    updateNavState();
+    renderSection();
+    return;
+  }
+
   const trigger = event.target.closest("[data-action]");
   if (!trigger || !workspace) {
     return;
