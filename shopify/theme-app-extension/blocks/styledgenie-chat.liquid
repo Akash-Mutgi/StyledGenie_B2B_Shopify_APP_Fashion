@@ -1,7 +1,7 @@
 {% assign api_base_url = block.settings.api_base_url | default: 'http://127.0.0.1:8000' %}
 
-{{ 'chat-widget.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'chat-widget.js' | asset_url }}" defer></script>
+<link rel="stylesheet" href="{{ 'chat-widget.css' | asset_url }}?v=20260421a">
+<link rel="preload" href="{{ 'chat-widget.js' | asset_url }}?v=20260421a" as="script">
 
 <div
   id="styledgenie-chat-root"
@@ -9,12 +9,17 @@
   data-api-base="{{ api_base_url }}"
   data-cart-root="{{ routes.root_url }}"
   data-store-domain="{{ shop.permanent_domain }}"
+  data-customer-name="{% if customer %}{{ customer.first_name | append: ' ' | append: customer.last_name | strip | escape }}{% endif %}"
+  data-customer-email="{% if customer %}{{ customer.email | escape }}{% endif %}"
+  data-customer-avatar=""
 ></div>
+
+<script src="{{ 'chat-widget.js' | asset_url }}?v=20260421a"></script>
 
 {% schema %}
 {
   "name": "StyledGenie Chat",
-  "target": "section",
+  "target": "body",
   "settings": [
     {
       "type": "text",

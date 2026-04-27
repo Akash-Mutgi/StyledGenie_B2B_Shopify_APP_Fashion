@@ -1,0 +1,16 @@
+client_id = "76a51db366db9024cdb2f0a2ed975925"
+name = "StyledGenieB2B_Production"
+application_url = "https://shivering-herring-iguana.ngrok-free.dev/"
+embedded = true
+extension_directories = ["shopify/theme-app-extension"]
+
+[webhooks]
+api_version = "2026-01"
+
+[access_scopes]
+scopes = "read_products,write_products,read_orders,read_inventory"
+optional_scopes = []
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = []

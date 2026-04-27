@@ -1,0 +1,191 @@
+import sys
+
+JS  = "../shopify/theme-app-extension/assets/chat-widget.js"
+CSS = "../shopify/theme-app-extension/assets/chat-widget.css"
+
+# ── READ ──────────────────────────────────────────────────────────────────────
+with open(JS, "r") as f:
+    js = f.read()
+
+with open(CSS, "r") as f:
+    css = f.read()
+
+errors = []
+
+# ══ PATCH 1 ── Add close button inside header-main ═══════════════════════════
+# Unique anchor: end of brand-lockup (</div>) + end of header-main (</div>)
+# + start of presence div. Appears exactly once.
+OLD_HEADER = (
+    '          </div>\n'
+    '        </div>\n'
+    '        <div class="styledgenie-presence online">'
+)
+CLOSE_BTN = (
+    '          <button\n'
+    '            id="styledgenie-close-button"\n'
+    '            class="styledgenie-close-button"\n'
+    '            type="button"\n'
+    '            aria-label="Close stylist"\n'
+    '            title="Close"\n'
+    '          >\n'
+    '            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">\n'
+    '              <path d="M18 6L6 18M6 6l12 12" fill="none" stroke="currentColor" '
+    'stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>\n'
+    '            </svg>\n'
+    '          </button>\n'
+)
+NEW_HEADER = (
+    '          </div>\n'
+    + CLOSE_BTN +
+    '        </div>\n'
+    '        <div class="styledgenie-presence online">'
+)
+
+if OLD_HEADER in js:
+    js = js.replace(OLD_HEADER, NEW_HEADER, 1)
+    print("✓ PATCH 1: Close button HTML added to header")
+else:
+    errors.append("✗ PATCH 1: header insertion point not found")
+
+# ══ PATCH 2 ── Add reopen bubble after launcher via JS (after root.innerHTML) ═
+# We inject the bubble creation right after the closing of the innerHTML template
+# Unique anchor: the line that ends root.innerHTML assignment
+# It ends with backtick + semicolon on its own line near the launcher block
+OLD_INIT = '  async function initializeWidget() {'
+BUBBLE_JS = (
+    '  // ── Reopen bubble (injected after innerHTML) ──────────────────────────\n'
+    '  const reopenBubble = document.createElement("button");\n'
+    '  reopenBubble.id = "styledgenie-reopen-bubble";\n'
+    '  reopenBubble.className = "styledgenie-reopen-bubble";\n'
+    '  reopenBubble.type = "button";\n'
+    '  reopenBubble.setAttribute("aria-label", "Open StyledGenie stylist");\n'
+    '  reopenBubble.innerHTML = \'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="22" height="22"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>\';\n'
+    '  root.appendChild(reopenBubble);\n'
+    '\n'
+    '  async function initializeWidget() {'
+)
+
+if OLD_INIT in js:
+    js = js.replace(OLD_INIT, BUBBLE_JS, 1)
+    print("✓ PATCH 2: Reopen bubble element injected")
+else:
+    errors.append("✗ PATCH 2: initializeWidget anchor not found")
+
+# ══ PATCH 3 ── Wire close + reopen event listeners ════════════════════════════
+# Insert after the homeButton listener block (unique pattern)
+OLD_LISTENERS = (
+    '  if (homeButton) {\n'
+    '    homeButton.addEventListener("click", () => {\n'
+    '      returnToChatHome();\n'
+    '    });\n'
+    '  }\n'
+)
+NEW_LISTENERS = (
+    '  if (homeButton) {\n'
+    '    homeButton.addEventListener("click", () => {\n'
+    '      returnToChatHome();\n'
+    '    });\n'
+    '  }\n'
+    '\n'
+    '  // ── Close / reopen listeners ─────────────────────────────────────────\n'
+    '  const closeButton = root.querySelector("#styledgenie-close-button");\n'
+    '  const reopenBtn   = root.querySelector("#styledgenie-reopen-bubble");\n'
+    '  const launcher    = root.querySelector(".styledgenie-launcher");\n'
+    '\n'
+    '  if (closeButton) {\n'
+    '    closeButton.addEventListener("click", () => {\n'
+    '      if (launcher) launcher.classList.add("sg-collapsed");\n'
+    '      if (reopenBtn) reopenBtn.classList.add("sg-visible");\n'
+    '    });\n'
+    '  }\n'
+    '\n'
+    '  if (reopenBtn) {\n'
+    '    reopenBtn.addEventListener("click", () => {\n'
+    '      if (launcher) launcher.classList.remove("sg-collapsed");\n'
+    '      reopenBtn.classList.remove("sg-visible");\n'
+    '    });\n'
+    '  }\n'
+)
+
+if OLD_LISTENERS in js:
+    js = js.replace(OLD_LISTENERS, NEW_LISTENERS, 1)
+    print("✓ PATCH 3: Close/reopen event listeners wired")
+else:
+    errors.append("✗ PATCH 3: homeButton listener anchor not found")
+
+# ══ PATCH 4 ── Add CSS: close button margin + collapsed state + reopen bubble ═
+NEW_CSS = """
+/* ── Close button positioning ──────────────────────────────────────────── */
+.styledgenie-close-button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Collapsed state ────────────────────────────────────────────────────── */
+.styledgenie-launcher.sg-collapsed {
+  display: none !important;
+}
+
+/* ── Reopen bubble ──────────────────────────────────────────────────────── */
+.styledgenie-reopen-bubble {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: #111111;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+  z-index: 9999;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.styledgenie-reopen-bubble.sg-visible {
+  display: inline-flex;
+}
+
+.styledgenie-reopen-bubble:hover {
+  transform: scale(1.06);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.styledgenie-reopen-bubble svg {
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .styledgenie-reopen-bubble {
+    right: 14px;
+    bottom: 14px;
+  }
+}
+"""
+
+GUARD = "sg-collapsed"
+if GUARD not in css:
+    css = css + NEW_CSS
+    print("✓ PATCH 4: Collapsed state + reopen bubble CSS added")
+else:
+    print("~ PATCH 4: CSS already patched, skipped")
+
+# ══ REPORT + WRITE ════════════════════════════════════════════════════════════
+if errors:
+    for e in errors:
+        print(e)
+    sys.exit(1)
+
+with open(JS, "w") as f:
+    f.write(js)
+
+with open(CSS, "w") as f:
+    f.write(css)
+
+print("\n✓ All patches applied. Deploy with: shopify app deploy")

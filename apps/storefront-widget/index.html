@@ -4,60 +4,191 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StyledGenie Storefront Widget Demo</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260410a" />
   </head>
   <body>
-    <main class="page-shell">
-      <section class="hero">
-        <p class="eyebrow">Customer Experience Demo</p>
-        <h1>StyledGenie Storefront AI Widget</h1>
-        <p class="hero-copy">
-          This is a simple demo screen that shows how the shopper-facing AI assistant
-          can handle outfit curation, inspiration uploads, complete-the-look, and
-          support questions.
-        </p>
-      </section>
-
-      <section class="widget-panel">
-        <div class="widget-header">
-          <div class="widget-brand-lockup">
-            <div class="widget-logo" id="widgetLogo" aria-hidden="true"></div>
-            <div>
-              <p class="widget-label" id="widgetAssistantName">StyledGenie AI</p>
-              <h2 id="widgetWelcomeTitle">Fashion Assistant</h2>
+    <main class="chat-demo-shell">
+      <section class="chat-stage" aria-label="Storefront chat preview">
+        <section class="widget-panel">
+          <div class="widget-header">
+            <div class="widget-header-main">
+              <button
+                id="widgetHomeButton"
+                class="widget-home-button hidden"
+                type="button"
+                aria-label="Back to home"
+                title="Back to home"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M14.5 6.5L9 12L14.5 17.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.8"
+                  />
+                </svg>
+                <span>Back</span>
+              </button>
+              <div class="widget-brand-lockup">
+                <div class="widget-logo" id="widgetLogo" aria-hidden="true"></div>
+                <div>
+                  <p class="widget-label" id="widgetAssistantName">StyledGenie AI</p>
+                  <h2 id="widgetWelcomeTitle">Fashion Assistant</h2>
+                </div>
+              </div>
+            </div>
+            <div class="widget-presence online">
+              <span class="presence-dot" aria-hidden="true"></span>
+              <span class="status-pill">Online now</span>
             </div>
           </div>
-          <span class="status-pill">Demo Mode</span>
-        </div>
 
-        <div class="mode-list">
-          <button class="mode-button active" data-mode="outfit">Outfit Curation</button>
-          <button class="mode-button" data-mode="inspire">Get Inspired</button>
-          <button class="mode-button" data-mode="complete">Complete The Look</button>
-          <button class="mode-button" data-mode="support">Support</button>
-        </div>
+          <div class="mode-list" aria-label="Chat modes">
+            <button class="mode-button active" data-mode="outfit">Find My Outfit</button>
+            <button class="mode-button" data-mode="inspire">Get Inspired</button>
+            <button class="mode-button" data-mode="complete">Complete My Look</button>
+            <button class="mode-button" data-mode="support">Returns / Help</button>
+          </div>
 
-        <div id="chatLog" class="chat-log"></div>
+          <div class="chat-log-shell">
+            <div id="chatLog" class="chat-log" aria-live="polite"></div>
+          </div>
 
-        <div class="upload-card">
-          <label for="imageInput">Optional image upload</label>
-          <input id="imageInput" type="file" accept="image/*" />
-          <p class="helper-text">
-            Use this for inspiration images or outfit photos in a future backend-connected version.
-          </p>
-        </div>
+          <div class="composer-shell">
+            <input id="imageInput" type="file" accept="image/*" hidden />
+            <input id="imageUrlInput" type="hidden" />
 
-        <form id="chatForm" class="chat-form">
-          <input
-            id="chatInput"
-            type="text"
-            placeholder="Ask for a full outfit, upload inspiration, or ask a support question..."
-          />
-          <button type="submit">Send</button>
-        </form>
+            <form id="chatForm" class="chat-form">
+              <div id="composerQuickActions" class="composer-quick-actions hidden">
+                <button type="button" data-action="camera">Use Camera</button>
+                <button type="button" data-action="upload">Upload Image</button>
+              </div>
+              <input
+                id="chatInput"
+                type="text"
+                placeholder="Tell me the occasion, budget, mood, or ask for help..."
+              />
+              <div class="composer-toolbar">
+                <button
+                  id="composerPlusButton"
+                  class="composer-plus-button"
+                  type="button"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                  aria-label="Open image actions"
+                  title="Add image"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      d="M12 5V19"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M5 12H19"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="1.8"
+                    />
+                  </svg>
+                </button>
+                <div class="composer-badges" aria-hidden="true">
+                  <span id="composerModeBadge" class="composer-badge">Find my outfit</span>
+                  <span id="composerSignalBadge" class="composer-badge composer-badge-muted">Live catalog</span>
+                </div>
+                <button
+                  id="voiceButton"
+                  class="composer-voice-button"
+                  type="button"
+                  aria-label="Start voice input"
+                  title="Start voice input"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      d="M12 4.75C10.2051 4.75 8.75 6.20507 8.75 8V11C8.75 12.7949 10.2051 14.25 12 14.25C13.7949 14.25 15.25 12.7949 15.25 11V8C15.25 6.20507 13.7949 4.75 12 4.75Z"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M6.75 10.75V11C6.75 13.8995 9.10051 16.25 12 16.25C14.8995 16.25 17.25 13.8995 17.25 11V10.75"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M12 16.25V19.25"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="1.8"
+                    />
+                  </svg>
+                </button>
+                <button
+                  class="composer-send-button"
+                  type="submit"
+                  aria-label="Send message"
+                  title="Send message"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      d="M4 11.5L20 4L13 20L10.8 13.8L4 11.5Z"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M10.8 13.8L20 4"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-width="1.8"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </form>
+            <p id="guidedHelperText" class="guided-helper-text hidden">
+              This feature uses guided steps for better results.
+            </p>
+          </div>
+
+          <div id="cameraCard" class="camera-modal hidden" aria-live="polite">
+            <div class="camera-card camera-modal-card">
+              <div class="camera-modal-header">
+                <p class="camera-modal-title">Use camera</p>
+                <button id="cancelCameraButton" class="camera-modal-close" type="button">Close</button>
+              </div>
+              <p class="camera-modal-copy">
+                Frame the look, then capture when it feels right. A full-length shot gives me the best read on proportions, layers, and shoes.
+              </p>
+              <div class="camera-frame">
+                <video id="cameraVideo" autoplay playsinline muted></video>
+                <img id="cameraStillImage" class="hidden" alt="Captured camera preview" />
+                <canvas id="cameraCanvas" class="hidden"></canvas>
+              </div>
+              <div class="camera-control-row">
+                <button id="capturePhotoButton" class="upload-action-button primary" type="button">Capture</button>
+                <button id="retakePhotoButton" class="upload-action-button hidden" type="button">Retake</button>
+                <button id="confirmPhotoButton" class="upload-action-button hidden" type="button">Use Photo</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260410a"></script>
   </body>
-  </html>
+</html>

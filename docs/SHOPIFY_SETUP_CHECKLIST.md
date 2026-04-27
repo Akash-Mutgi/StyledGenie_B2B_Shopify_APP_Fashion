@@ -18,7 +18,7 @@ Use this checklist when you are ready to connect the MVP to Shopify.
 ## App Setup
 
 - App name: `StyledGenieB2B_Test`
-- App URL: `https://admin.shopify.com/store/ea4aad-0f/settings/domains/142453670222`
+- App URL: `https://shopify.dev/apps/default-app-home` until you host a real HTTPS app URL
 - Store the Shopify app metadata and credentials in [`.env`](/Users/akashmutgi/Documents/StyledGenie_B2B_Shopify_APP_Fashion/.env).
 - Confirm that you can call the Shopify Admin API.
 
