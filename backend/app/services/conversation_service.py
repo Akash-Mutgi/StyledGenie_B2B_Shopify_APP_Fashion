@@ -1434,6 +1434,7 @@ class ConversationService:
                 price=self.recommendation_service._price_text(item.get("price")),
                 product_url=self.recommendation_service._product_url(item),
                 cart_variant_id=item.get("shopify_variant_id") or None,
+                **self.recommendation_service._inventory_fields(item),
             )
             for item in products
         ]

@@ -3,103 +3,141 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StyledGenie Storefront Widget Demo</title>
-    <link rel="stylesheet" href="./styles.css?v=20260410a" />
+    <title>StyledGenie Chatbot</title>
+    <link rel="stylesheet" href="./styles.css?v=20260629-shopify-product-grid" />
   </head>
   <body>
     <main class="chat-demo-shell">
       <section class="chat-stage" aria-label="Storefront chat preview">
         <section class="widget-panel">
-          <div class="widget-header">
-            <div class="widget-header-main">
-              <button
-                id="widgetHomeButton"
-                class="widget-home-button hidden"
-                type="button"
-                aria-label="Back to home"
-                title="Back to home"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path
-                    d="M14.5 6.5L9 12L14.5 17.5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="1.8"
-                  />
-                </svg>
-                <span>Back</span>
-              </button>
-              <div class="widget-brand-lockup">
-                <div class="widget-logo" id="widgetLogo" aria-hidden="true"></div>
-                <div>
-                  <p class="widget-label" id="widgetAssistantName">StyledGenie AI</p>
-                  <h2 id="widgetWelcomeTitle">Fashion Assistant</h2>
-                </div>
-              </div>
-            </div>
-            <div class="widget-presence online">
-              <span class="presence-dot" aria-hidden="true"></span>
-              <span class="status-pill">Online now</span>
-            </div>
-          </div>
+          <header class="widget-header">
+            <button
+              id="widgetNavButton"
+              class="widget-nav-button"
+              type="button"
+              aria-label="Close chat"
+              title="Close chat"
+            >
+              <svg class="nav-icon-close" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M6 6L18 18M18 6L6 18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="2"
+                />
+              </svg>
+              <svg class="nav-icon-back hidden" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M14.5 6.5L9 12L14.5 17.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </button>
 
-          <div class="mode-list" aria-label="Chat modes">
-            <button class="mode-button active" data-mode="outfit">Find My Outfit</button>
-            <button class="mode-button" data-mode="inspire">Get Inspired</button>
-            <button class="mode-button" data-mode="complete">Complete My Look</button>
-            <button class="mode-button" data-mode="support">Returns / Help</button>
-          </div>
+            <div class="widget-header-titles">
+              <h1 class="widget-title" id="widgetWelcomeTitle">Welcome!</h1>
+              <p class="widget-subtitle hidden" id="widgetFeatureSubtitle"></p>
+            </div>
+
+            <div class="widget-header-actions">
+              <button
+                id="widgetSkipButton"
+                class="widget-skip-button hidden"
+                type="button"
+              >
+                Skip for now
+              </button>
+
+              <button
+                id="widgetCartButton"
+                class="widget-nav-button widget-cart-button"
+                type="button"
+                aria-label="View cart"
+                title="View cart"
+              >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M6 7h15l-1.5 9H7.5L6 7z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                />
+                <path d="M6 7L5 4H2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" />
+                <circle cx="9" cy="20" r="1" fill="currentColor" />
+                <circle cx="17" cy="20" r="1" fill="currentColor" />
+              </svg>
+              <span id="cartBadge" class="cart-badge">2</span>
+            </button>
+            </div>
+          </header>
+
+          <section id="authScreen" class="auth-screen hidden" aria-label="Customer login">
+            <div id="authBody" class="auth-body"></div>
+          </section>
+
+          <section id="onboardingScreen" class="onboarding-screen hidden" aria-label="Profile onboarding">
+            <div id="onboardingBody" class="onboarding-body"></div>
+            <footer id="onboardingFooter" class="onboarding-footer hidden">
+              <button id="onboardingPrimaryBtn" type="button" class="onboarding-primary-btn">Next</button>
+            </footer>
+          </section>
+
+          <section id="onboardingLoading" class="onboarding-loading-screen hidden" aria-label="Analyzing profile">
+            <div class="onboarding-spinner" aria-hidden="true"></div>
+          </section>
 
           <div class="chat-log-shell">
             <div id="chatLog" class="chat-log" aria-live="polite"></div>
           </div>
 
+          <section id="swapScreen" class="swap-screen hidden" aria-label="Swap outfit items">
+            <p id="swapScreenHint" class="swap-screen-hint">Tap an item to swap it — the rest of the look stays fixed.</p>
+            <div id="swapComposition" class="swap-composition"></div>
+            <div id="swapItemGrid" class="swap-item-grid"></div>
+            <div class="swap-screen-footer">
+              <button id="swapAddToCartButton" class="swap-add-cart-button" type="button">Add to cart</button>
+            </div>
+          </section>
+
           <div class="composer-shell">
             <input id="imageInput" type="file" accept="image/*" hidden />
             <input id="imageUrlInput" type="hidden" />
 
-            <form id="chatForm" class="chat-form">
+            <form id="chatForm" class="chat-form home-mode">
+              <button
+                id="composerPlusButton"
+                class="composer-plus-button"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-label="Open image actions"
+                title="Add image"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5V19" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" />
+                  <path d="M5 12H19" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" />
+                </svg>
+              </button>
               <div id="composerQuickActions" class="composer-quick-actions hidden">
-                <button type="button" data-action="camera">Use Camera</button>
-                <button type="button" data-action="upload">Upload Image</button>
+                <button type="button" data-action="camera">Take photo</button>
+                <button type="button" data-action="upload">Upload photo</button>
               </div>
               <input
                 id="chatInput"
                 type="text"
-                placeholder="Tell me the occasion, budget, mood, or ask for help..."
+                placeholder="+ Type something....."
               />
               <div class="composer-toolbar">
-                <button
-                  id="composerPlusButton"
-                  class="composer-plus-button"
-                  type="button"
-                  aria-haspopup="true"
-                  aria-expanded="false"
-                  aria-label="Open image actions"
-                  title="Add image"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path
-                      d="M12 5V19"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-width="1.8"
-                    />
-                    <path
-                      d="M5 12H19"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-width="1.8"
-                    />
-                  </svg>
-                </button>
-                <div class="composer-badges" aria-hidden="true">
-                  <span id="composerModeBadge" class="composer-badge">Find my outfit</span>
-                  <span id="composerSignalBadge" class="composer-badge composer-badge-muted">Live catalog</span>
+                <div class="composer-badges hidden" aria-hidden="true">
+                  <span id="composerModeBadge" class="composer-badge"></span>
+                  <span id="composerSignalBadge" class="composer-badge composer-badge-muted"></span>
                 </div>
                 <button
                   id="voiceButton"
@@ -124,13 +162,7 @@
                       stroke-linecap="round"
                       stroke-width="1.8"
                     />
-                    <path
-                      d="M12 16.25V19.25"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-width="1.8"
-                    />
+                    <path d="M12 16.25V19.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" />
                   </svg>
                 </button>
                 <button
@@ -148,40 +180,30 @@
                       stroke-linejoin="round"
                       stroke-width="1.8"
                     />
-                    <path
-                      d="M10.8 13.8L20 4"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-linecap="round"
-                      stroke-width="1.8"
-                    />
                   </svg>
                 </button>
               </div>
             </form>
-            <p id="guidedHelperText" class="guided-helper-text hidden">
-              This feature uses guided steps for better results.
-            </p>
+            <p id="guidedHelperText" class="guided-helper-text hidden"></p>
           </div>
 
-          <div id="cameraCard" class="camera-modal hidden" aria-live="polite">
-            <div class="camera-card camera-modal-card">
-              <div class="camera-modal-header">
-                <p class="camera-modal-title">Use camera</p>
-                <button id="cancelCameraButton" class="camera-modal-close" type="button">Close</button>
-              </div>
-              <p class="camera-modal-copy">
-                Frame the look, then capture when it feels right. A full-length shot gives me the best read on proportions, layers, and shoes.
-              </p>
+          <div id="cameraCard" class="camera-screen hidden" aria-live="polite">
+            <div class="camera-screen-body">
               <div class="camera-frame">
+                <div class="camera-viewfinder" aria-hidden="true">
+                  <span class="camera-corner camera-corner-tl"></span>
+                  <span class="camera-corner camera-corner-tr"></span>
+                  <span class="camera-corner camera-corner-bl"></span>
+                  <span class="camera-corner camera-corner-br"></span>
+                </div>
                 <video id="cameraVideo" autoplay playsinline muted></video>
                 <img id="cameraStillImage" class="hidden" alt="Captured camera preview" />
                 <canvas id="cameraCanvas" class="hidden"></canvas>
               </div>
               <div class="camera-control-row">
-                <button id="capturePhotoButton" class="upload-action-button primary" type="button">Capture</button>
+                <button id="capturePhotoButton" class="camera-shutter-button" type="button" aria-label="Capture photo"></button>
                 <button id="retakePhotoButton" class="upload-action-button hidden" type="button">Retake</button>
-                <button id="confirmPhotoButton" class="upload-action-button hidden" type="button">Use Photo</button>
+                <button id="confirmPhotoButton" class="upload-action-button primary hidden" type="button">Use Photo</button>
               </div>
             </div>
           </div>
@@ -189,6 +211,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260410a"></script>
+    <script src="./app.js?v=20260629-shopify-product-grid"></script>
   </body>
 </html>

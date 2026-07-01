@@ -360,6 +360,79 @@ function renderProductOptionTags(options, selectedValue, placeholder = "Select a
   `;
 }
 
+function renderConnectedCatalogGallery(options) {
+  if (!options || !options.length) {
+    return `<p class="empty-copy">Sync your Shopify catalog to preview every connected product with images here.</p>`;
+  }
+
+  const withImages = options.filter((item) => item.image_url).length;
+  const adminBase = (workspace && workspace.profile && workspace.profile.connected_store_domain) || "";
+
+  return `
+    <div class="connected-catalog-summary">
+      <span class="inline-badge">${formatNumber(options.length)} products connected</span>
+      <span class="status-chip ${withImages ? "live" : "needs-setup"}">
+        ${withImages ? `${formatNumber(withImages)} with images` : "Images missing"}
+      </span>
+    </div>
+    <div class="connected-catalog-grid">
+      ${options
+        .map((item) => {
+          const imageMarkup = item.image_url
+            ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" loading="lazy" />`
+            : `<div class="catalog-sample-placeholder">${escapeHtml(getBrandInitials(item.title))}</div>`;
+          const storeHandle = String(adminBase || "")
+            .replace("https://", "")
+            .replace("http://", "")
+            .replace(".myshopify.com", "")
+            .split("/")[0];
+          const adminLink =
+            item.shopify_legacy_id && storeHandle
+              ? `https://admin.shopify.com/store/${escapeHtml(storeHandle)}/products/${escapeHtml(
+                  item.shopify_legacy_id
+                )}`
+              : "";
+          const metafieldCount = Object.keys(item.metafields || {}).length;
+          const extraImages = Math.max(0, (item.image_urls || []).length - 1);
+          const inventoryKnown = item.inventory_quantity !== null && item.inventory_quantity !== undefined;
+          const inventoryLabel = inventoryKnown
+            ? `${formatNumber(item.inventory_quantity)} in stock`
+            : item.available_for_sale === false
+              ? "Out of stock"
+              : item.available_for_sale === true
+                ? "Available"
+                : "";
+
+          return `
+            <article class="connected-catalog-card">
+              <div class="connected-catalog-media">${imageMarkup}</div>
+              <div class="connected-catalog-copy">
+                <strong>${escapeHtml(item.title)}</strong>
+                <p>${escapeHtml(item.category || "General")}</p>
+                <div class="connected-catalog-meta">
+                  ${item.price ? `<span>${escapeHtml(formatPrice(item.price))}</span>` : ""}
+                  ${inventoryLabel ? `<span>${escapeHtml(inventoryLabel)}</span>` : ""}
+                  ${item.sku ? `<span>SKU ${escapeHtml(item.sku)}</span>` : ""}
+                  ${extraImages ? `<span>${extraImages} more image${extraImages === 1 ? "" : "s"}</span>` : ""}
+                  ${metafieldCount ? `<span>${metafieldCount} metadata field${metafieldCount === 1 ? "" : "s"}</span>` : ""}
+                </div>
+                <div class="connected-catalog-links">
+                  ${
+                    item.product_url
+                      ? `<a href="${escapeHtml(item.product_url)}" target="_blank" rel="noreferrer">Storefront</a>`
+                      : ""
+                  }
+                  ${adminLink ? `<a href="${adminLink}" target="_blank" rel="noreferrer">Shopify admin</a>` : ""}
+                </div>
+              </div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
 function getChatbotFingerprint(payload) {
   return JSON.stringify(payload || {});
 }
@@ -2888,6 +2961,22 @@ function renderCatalogSection() {
                 customer care, and brand training.
               </p>
             </div>
+          </article>
+
+          <article class="workspace-card">
+            <div class="card-header">
+              <div>
+                <p class="card-eyebrow">Live Catalog</p>
+                <h3>Connected Shopify Products</h3>
+                <p class="card-copy">
+                  Every synced product from Shopify admin, including featured images, extra gallery images, and metafields.
+                </p>
+              </div>
+              <button class="secondary-button" type="button" data-action="sync-inline-catalog">
+                Sync catalog
+              </button>
+            </div>
+            ${renderConnectedCatalogGallery(catalogProductOptions)}
           </article>
 
           <article class="workspace-card">

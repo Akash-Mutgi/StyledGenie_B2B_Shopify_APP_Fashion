@@ -329,6 +329,41 @@ class SupabaseService:
         except Exception:
             return []
 
+    def _parse_json_list(self, raw_value: object) -> list:
+        if isinstance(raw_value, list):
+            return [str(item).strip() for item in raw_value if str(item).strip()]
+        if isinstance(raw_value, str) and raw_value.strip():
+            try:
+                parsed = json.loads(raw_value)
+            except Exception:
+                return []
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        return []
+
+    def _parse_json_dict(self, raw_value: object) -> dict[str, list[str]]:
+        if isinstance(raw_value, dict):
+            payload = raw_value
+        elif isinstance(raw_value, str) and raw_value.strip():
+            try:
+                parsed = json.loads(raw_value)
+            except Exception:
+                return {}
+            payload = parsed if isinstance(parsed, dict) else {}
+        else:
+            return {}
+
+        normalized: dict[str, list[str]] = {}
+        for key, values in payload.items():
+            label = str(key or "").strip()
+            if not label:
+                continue
+            if isinstance(values, list):
+                normalized[label] = [str(item).strip() for item in values if str(item).strip()]
+            elif values not in (None, ""):
+                normalized[label] = [str(values).strip()]
+        return normalized
+
     def fetch_catalog_products(self) -> list[dict]:
         client = self.get_client()
         merchant_id = self.get_default_merchant_id()
@@ -340,8 +375,9 @@ class SupabaseService:
             product_response = (
                 client.table("products")
                 .select(
-                    "id, shopify_product_id, title, category, description, image_url, price, handle, "
-                    "shopify_variant_id, product_url"
+                    "id, shopify_product_id, shopify_legacy_id, title, category, description, image_url, image_urls, "
+                    "metafields, price, handle, shopify_variant_id, product_url, sku, available_for_sale, "
+                    "inventory_quantity, inventory_policy, inventory_tracked"
                 )
                 .eq("merchant_id", merchant_id)
                 .order("created_at")
@@ -351,13 +387,25 @@ class SupabaseService:
             try:
                 product_response = (
                     client.table("products")
-                    .select("id, shopify_product_id, title, category, description, image_url, price")
+                    .select(
+                        "id, shopify_product_id, title, category, description, image_url, price, handle, "
+                        "shopify_variant_id, product_url"
+                    )
                     .eq("merchant_id", merchant_id)
                     .order("created_at")
                     .execute()
                 )
             except Exception:
-                return []
+                try:
+                    product_response = (
+                        client.table("products")
+                        .select("id, shopify_product_id, title, category, description, image_url, price")
+                        .eq("merchant_id", merchant_id)
+                        .order("created_at")
+                        .execute()
+                    )
+                except Exception:
+                    return []
 
         products = product_response.data or []
         if not products:
@@ -386,30 +434,70 @@ class SupabaseService:
 
         normalized_products = []
         for item in products:
+            image_urls = self._parse_json_list(item.get("image_urls"))
+            if not image_urls and item.get("image_url"):
+                image_urls = [item.get("image_url")]
             normalized_products.append(
                 {
                     "id": item.get("id"),
                     "shopify_product_id": item.get("shopify_product_id"),
+                    "shopify_legacy_id": item.get("shopify_legacy_id"),
                     "title": item.get("title") or "Untitled product",
                     "category": item.get("category") or "General",
                     "description": item.get("description") or "",
-                    "image_url": item.get("image_url"),
+                    "image_url": item.get("image_url") or (image_urls[0] if image_urls else None),
+                    "image_urls": image_urls,
+                    "metafields": self._parse_json_dict(item.get("metafields")),
                     "price": item.get("price"),
                     "handle": item.get("handle"),
                     "shopify_variant_id": item.get("shopify_variant_id"),
                     "product_url": item.get("product_url"),
+                    "sku": item.get("sku"),
+                    "available_for_sale": item.get("available_for_sale"),
+                    "inventory_quantity": item.get("inventory_quantity"),
+                    "inventory_policy": item.get("inventory_policy"),
+                    "inventory_tracked": item.get("inventory_tracked"),
                     "tags": tag_map.get(item.get("id"), []),
                 }
             )
 
         return normalized_products
 
+    def fetch_catalog_product_by_shopify_legacy_id(self, legacy_product_id: str) -> Optional[dict]:
+        normalized_id = str(legacy_product_id or "").strip()
+        if not normalized_id:
+            return None
+
+        product_gid = (
+            normalized_id
+            if normalized_id.startswith("gid://")
+            else f"gid://shopify/Product/{normalized_id}"
+        )
+
+        for product in self.fetch_catalog_products():
+            shopify_product_id = str(product.get("shopify_product_id") or "")
+            legacy_id = str(product.get("shopify_legacy_id") or "")
+            if (
+                shopify_product_id == product_gid
+                or shopify_product_id.endswith(f"/{normalized_id}")
+                or legacy_id == normalized_id
+            ):
+                return product
+
+        return None
+
     def _backfill_catalog_product_cards(self, products: list[dict]) -> list[dict]:
         missing_products = [
             item
             for item in products
             if item.get("shopify_product_id")
-            and (not item.get("handle") or not item.get("product_url") or not item.get("shopify_variant_id"))
+            and (
+                not item.get("handle")
+                or not item.get("product_url")
+                or not item.get("shopify_variant_id")
+                or item.get("inventory_quantity") is None
+                or item.get("available_for_sale") is None
+            )
         ]
 
         if not missing_products:
@@ -437,6 +525,23 @@ class SupabaseService:
                 "handle": item.get("handle") or detail.get("handle"),
                 "product_url": item.get("product_url") or detail.get("product_url"),
                 "shopify_variant_id": item.get("shopify_variant_id") or detail.get("shopify_variant_id"),
+                "sku": item.get("sku") or detail.get("sku"),
+                "available_for_sale": (
+                    item.get("available_for_sale")
+                    if item.get("available_for_sale") is not None
+                    else detail.get("available_for_sale")
+                ),
+                "inventory_quantity": (
+                    item.get("inventory_quantity")
+                    if item.get("inventory_quantity") is not None
+                    else detail.get("inventory_quantity")
+                ),
+                "inventory_policy": item.get("inventory_policy") or detail.get("inventory_policy"),
+                "inventory_tracked": (
+                    item.get("inventory_tracked")
+                    if item.get("inventory_tracked") is not None
+                    else detail.get("inventory_tracked")
+                ),
             }
             enriched_products.append(merged_item)
 
@@ -445,24 +550,51 @@ class SupabaseService:
                 and item.get("id")
                 and any(
                     merged_item.get(key) != item.get(key)
-                    for key in ("handle", "product_url", "shopify_variant_id")
+                    for key in (
+                        "handle",
+                        "product_url",
+                        "shopify_variant_id",
+                        "sku",
+                        "available_for_sale",
+                        "inventory_quantity",
+                        "inventory_policy",
+                        "inventory_tracked",
+                    )
                 )
             ):
                 try:
+                    update_payload = {
+                        "handle": merged_item.get("handle"),
+                        "product_url": merged_item.get("product_url"),
+                        "shopify_variant_id": merged_item.get("shopify_variant_id"),
+                        "sku": merged_item.get("sku"),
+                        "available_for_sale": merged_item.get("available_for_sale"),
+                        "inventory_quantity": merged_item.get("inventory_quantity"),
+                        "inventory_policy": merged_item.get("inventory_policy"),
+                        "inventory_tracked": merged_item.get("inventory_tracked"),
+                    }
                     (
                         client.table("products")
-                        .update(
-                            {
-                                "handle": merged_item.get("handle"),
-                                "product_url": merged_item.get("product_url"),
-                                "shopify_variant_id": merged_item.get("shopify_variant_id"),
-                            }
-                        )
+                        .update(update_payload)
                         .eq("id", item["id"])
                         .execute()
                     )
                 except Exception:
-                    pass
+                    try:
+                        (
+                            client.table("products")
+                            .update(
+                                {
+                                    "handle": merged_item.get("handle"),
+                                    "product_url": merged_item.get("product_url"),
+                                    "shopify_variant_id": merged_item.get("shopify_variant_id"),
+                                }
+                            )
+                            .eq("id", item["id"])
+                            .execute()
+                        )
+                    except Exception:
+                        pass
 
         return enriched_products
 
@@ -716,7 +848,11 @@ class SupabaseService:
             settings_payload.dict(),
         )
 
-    def fetch_catalog_product_options(self, limit: int = 250) -> list[CatalogProductOption]:
+    def fetch_catalog_product_options(self, limit: int = 0) -> list[CatalogProductOption]:
+        products = self.fetch_catalog_products()
+        if limit and limit > 0:
+            products = products[:limit]
+
         return [
             CatalogProductOption(
                 id=item["id"],
@@ -724,9 +860,20 @@ class SupabaseService:
                 category=item["category"],
                 price=str(item["price"]) if item.get("price") not in (None, "") else None,
                 image_url=item.get("image_url"),
+                image_urls=item.get("image_urls") or ([item.get("image_url")] if item.get("image_url") else []),
                 product_url=item.get("product_url") or self._dashboard_product_url(item.get("handle")),
+                handle=item.get("handle"),
+                shopify_legacy_id=item.get("shopify_legacy_id"),
+                shopify_variant_id=item.get("shopify_variant_id"),
+                sku=item.get("sku"),
+                available_for_sale=item.get("available_for_sale"),
+                inventory_quantity=item.get("inventory_quantity"),
+                inventory_policy=item.get("inventory_policy"),
+                inventory_tracked=item.get("inventory_tracked"),
+                tags=item.get("tags") or [],
+                metafields=item.get("metafields") or {},
             )
-            for item in self.fetch_catalog_products()[:limit]
+            for item in products
             if item.get("id")
         ]
 
@@ -893,44 +1040,75 @@ class SupabaseService:
         imported_count = 0
 
         for product in products:
+            image_urls = product.get("image_urls") or ([product.get("image_url")] if product.get("image_url") else [])
+            insert_payload = {
+                "merchant_id": merchant_id,
+                "shopify_product_id": product["shopify_product_id"],
+                "shopify_legacy_id": product.get("shopify_legacy_id"),
+                "handle": product.get("handle"),
+                "shopify_variant_id": product.get("shopify_variant_id"),
+                "sku": product.get("sku"),
+                "available_for_sale": product.get("available_for_sale"),
+                "inventory_quantity": product.get("inventory_quantity"),
+                "inventory_policy": product.get("inventory_policy"),
+                "inventory_tracked": product.get("inventory_tracked"),
+                "title": product["title"],
+                "category": product.get("category"),
+                "description": product.get("description"),
+                "image_url": product.get("image_url"),
+                "image_urls": image_urls,
+                "metafields": product.get("metafields") or {},
+                "product_url": product.get("product_url"),
+                "price": product.get("price"),
+            }
+
             try:
                 created = (
                     client.table("products")
-                    .insert(
-                        {
-                            "merchant_id": merchant_id,
-                            "shopify_product_id": product["shopify_product_id"],
-                            "handle": product.get("handle"),
-                            "shopify_variant_id": product.get("shopify_variant_id"),
-                            "title": product["title"],
-                            "category": product.get("category"),
-                            "description": product.get("description"),
-                            "image_url": product.get("image_url"),
-                            "product_url": product.get("product_url"),
-                            "price": product.get("price"),
-                        }
-                    )
+                    .insert(insert_payload)
                     .execute()
                 )
             except Exception:
+                fallback_payload = {
+                    key: value
+                    for key, value in insert_payload.items()
+                    if key
+                    not in {
+                        "shopify_legacy_id",
+                        "image_urls",
+                        "metafields",
+                        "sku",
+                        "available_for_sale",
+                        "inventory_quantity",
+                        "inventory_policy",
+                        "inventory_tracked",
+                    }
+                }
                 try:
                     created = (
                         client.table("products")
-                        .insert(
-                            {
-                                "merchant_id": merchant_id,
-                                "shopify_product_id": product["shopify_product_id"],
-                                "title": product["title"],
-                                "category": product.get("category"),
-                                "description": product.get("description"),
-                                "image_url": product.get("image_url"),
-                                "price": product.get("price"),
-                            }
-                        )
+                        .insert(fallback_payload)
                         .execute()
                     )
                 except Exception:
-                    continue
+                    try:
+                        created = (
+                            client.table("products")
+                            .insert(
+                                {
+                                    "merchant_id": merchant_id,
+                                    "shopify_product_id": product["shopify_product_id"],
+                                    "title": product["title"],
+                                    "category": product.get("category"),
+                                    "description": product.get("description"),
+                                    "image_url": product.get("image_url"),
+                                    "price": product.get("price"),
+                                }
+                            )
+                            .execute()
+                        )
+                    except Exception:
+                        continue
 
             if not created.data:
                 continue

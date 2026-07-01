@@ -66,19 +66,42 @@ class ShopifyService:
               cursor
               node {
                 id
+                legacyResourceId
                 handle
                 title
                 productType
                 descriptionHtml
                 tags
+                category {
+                  fullName
+                }
                 featuredImage {
                   url
+                }
+                images(first: 10) {
+                  nodes {
+                    url
+                  }
+                }
+                metafields(first: 50) {
+                  nodes {
+                    namespace
+                    key
+                    value
+                    type
+                  }
                 }
                 variants(first: 10) {
                   nodes {
                     legacyResourceId
                     price
                     availableForSale
+                    inventoryPolicy
+                    inventoryQuantity
+                    sku
+                    inventoryItem {
+                      tracked
+                    }
                   }
                 }
               }
@@ -102,23 +125,41 @@ class ShopifyService:
             for edge in edges:
                 node = edge.get("node", {})
                 first_variant = self._pick_preferred_variant((node.get("variants", {}).get("nodes") or []))
+                metafield_tags, metafields = self._extract_product_metafields(node.get("metafields", {}))
+                taxonomy_category = ((node.get("category") or {}).get("fullName") or "").strip()
+                image_nodes = (node.get("images") or {}).get("nodes") or []
+                image_urls = [
+                    (image or {}).get("url")
+                    for image in image_nodes
+                    if (image or {}).get("url")
+                ]
+                featured_image = (node.get("featuredImage") or {}).get("url") or (image_urls[0] if image_urls else None)
+                inferred_tags = self.catalog_intelligence_service.infer_tags(
+                    title=node.get("title"),
+                    category=taxonomy_category or node.get("productType"),
+                    description=node.get("descriptionHtml"),
+                    raw_tags=node.get("tags", []),
+                )
                 collected_products.append(
                     {
                         "shopify_product_id": node.get("id"),
+                        "shopify_legacy_id": str(node.get("legacyResourceId") or ""),
                         "handle": node.get("handle"),
                         "shopify_variant_id": str(first_variant.get("legacyResourceId") or ""),
+                        "sku": first_variant.get("sku"),
+                        "available_for_sale": bool(first_variant.get("availableForSale")),
+                        "inventory_quantity": first_variant.get("inventoryQuantity"),
+                        "inventory_policy": first_variant.get("inventoryPolicy"),
+                        "inventory_tracked": ((first_variant.get("inventoryItem") or {}).get("tracked")),
                         "title": node.get("title"),
-                        "category": node.get("productType"),
+                        "category": taxonomy_category or node.get("productType"),
                         "description": node.get("descriptionHtml"),
-                        "image_url": (node.get("featuredImage") or {}).get("url"),
+                        "image_url": featured_image,
+                        "image_urls": image_urls,
                         "product_url": self._build_product_url(node.get("handle")),
                         "price": first_variant.get("price"),
-                        "tags": self.catalog_intelligence_service.infer_tags(
-                            title=node.get("title"),
-                            category=node.get("productType"),
-                            description=node.get("descriptionHtml"),
-                            raw_tags=node.get("tags", []),
-                        ),
+                        "metafields": metafields,
+                        "tags": self._merge_catalog_tags(inferred_tags, metafield_tags),
                     }
                 )
 
@@ -129,6 +170,106 @@ class ShopifyService:
             cursor = page_info.get("endCursor")
 
         return collected_products
+
+    def fetch_product_by_legacy_id(self, legacy_product_id: str) -> Optional[dict]:
+        normalized_id = str(legacy_product_id or "").strip()
+        if not normalized_id:
+            return None
+
+        product_gid = (
+            normalized_id
+            if normalized_id.startswith("gid://")
+            else f"gid://shopify/Product/{normalized_id}"
+        )
+
+        query = """
+        query ProductDetail($id: ID!) {
+          product(id: $id) {
+            id
+            legacyResourceId
+            handle
+            title
+            productType
+            descriptionHtml
+            tags
+            category {
+              fullName
+            }
+            featuredImage {
+              url
+            }
+            images(first: 10) {
+              nodes {
+                url
+              }
+            }
+            metafields(first: 50) {
+              nodes {
+                namespace
+                key
+                value
+                type
+              }
+            }
+            variants(first: 10) {
+              nodes {
+                legacyResourceId
+                price
+                availableForSale
+                inventoryPolicy
+                inventoryQuantity
+                sku
+                inventoryItem {
+                  tracked
+                }
+              }
+            }
+          }
+        }
+        """
+
+        response = self.graphql(query, {"id": product_gid})
+        node = (response.get("data") or {}).get("product")
+        if not node:
+            return None
+
+        first_variant = self._pick_preferred_variant((node.get("variants") or {}).get("nodes") or [])
+        metafield_tags, metafields = self._extract_product_metafields(node.get("metafields", {}))
+        taxonomy_category = ((node.get("category") or {}).get("fullName") or "").strip()
+        image_nodes = (node.get("images") or {}).get("nodes") or []
+        image_urls = [
+            (image or {}).get("url")
+            for image in image_nodes
+            if (image or {}).get("url")
+        ]
+        featured_image = (node.get("featuredImage") or {}).get("url") or (image_urls[0] if image_urls else None)
+        inferred_tags = self.catalog_intelligence_service.infer_tags(
+            title=node.get("title"),
+            category=taxonomy_category or node.get("productType"),
+            description=node.get("descriptionHtml"),
+            raw_tags=node.get("tags", []),
+        )
+
+        return {
+            "shopify_product_id": node.get("id"),
+            "shopify_legacy_id": str(node.get("legacyResourceId") or normalized_id),
+        "handle": node.get("handle"),
+        "shopify_variant_id": str(first_variant.get("legacyResourceId") or ""),
+        "sku": first_variant.get("sku"),
+        "available_for_sale": bool(first_variant.get("availableForSale")),
+        "inventory_quantity": first_variant.get("inventoryQuantity"),
+        "inventory_policy": first_variant.get("inventoryPolicy"),
+        "inventory_tracked": ((first_variant.get("inventoryItem") or {}).get("tracked")),
+        "title": node.get("title"),
+            "category": taxonomy_category or node.get("productType"),
+            "description": node.get("descriptionHtml"),
+            "image_url": featured_image,
+            "image_urls": image_urls,
+            "product_url": self._build_product_url(node.get("handle")),
+            "price": first_variant.get("price"),
+            "metafields": metafields,
+            "tags": self._merge_catalog_tags(inferred_tags, metafield_tags),
+        }
 
     def fetch_product_card_details(self, shopify_product_ids: list[str]) -> dict[str, dict]:
         valid_ids = [item for item in shopify_product_ids if item]
@@ -145,6 +286,12 @@ class ShopifyService:
                 nodes {
                   legacyResourceId
                   availableForSale
+                  inventoryPolicy
+                  inventoryQuantity
+                  sku
+                  inventoryItem {
+                    tracked
+                  }
                 }
               }
             }
@@ -167,6 +314,11 @@ class ShopifyService:
                     "handle": node.get("handle"),
                     "product_url": self._build_product_url(node.get("handle")),
                     "shopify_variant_id": str(first_variant.get("legacyResourceId") or ""),
+                    "sku": first_variant.get("sku"),
+                    "available_for_sale": bool(first_variant.get("availableForSale")),
+                    "inventory_quantity": first_variant.get("inventoryQuantity"),
+                    "inventory_policy": first_variant.get("inventoryPolicy"),
+                    "inventory_tracked": ((first_variant.get("inventoryItem") or {}).get("tracked")),
                 }
 
         return details
@@ -564,6 +716,77 @@ class ShopifyService:
                 return variant
 
         return variants[0] or {}
+
+    def _merge_catalog_tags(self, inferred_tags: list[str], metafield_tags: list[str]) -> list[str]:
+        merged: list[str] = []
+        for tag in [*inferred_tags, *metafield_tags]:
+            normalized = str(tag or "").strip().lower()
+            if not normalized or normalized in merged:
+                continue
+            merged.append(normalized)
+        return merged
+
+    def _extract_product_metafields(self, metafield_connection: dict[str, Any]) -> tuple[list[str], dict[str, list[str]]]:
+        tags: list[str] = []
+        attributes: dict[str, list[str]] = {}
+
+        for node in (metafield_connection or {}).get("nodes") or []:
+            if not node:
+                continue
+
+            namespace = str(node.get("namespace") or "").strip().lower()
+            key = str(node.get("key") or "").strip().lower()
+            if not key:
+                continue
+
+            values = self._normalize_metafield_values(node.get("value"), node.get("type"))
+            if not values:
+                continue
+
+            label = key.replace("-", " ").replace("_", " ").strip()
+            attributes[label] = values
+            for value in values:
+                normalized_value = str(value).strip().lower()
+                if normalized_value and normalized_value not in tags:
+                    tags.append(normalized_value)
+                if namespace == "shopify":
+                    prefixed = f"{label}:{normalized_value}"
+                    if prefixed not in tags:
+                        tags.append(prefixed)
+
+        return tags, attributes
+
+    def _normalize_metafield_values(self, raw_value: Any, field_type: Any) -> list[str]:
+        if raw_value is None:
+            return []
+
+        value = str(raw_value).strip()
+        if not value:
+            return []
+
+        if value.startswith("[") or value.startswith("{"):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = value
+        else:
+            parsed = value
+
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+
+        if isinstance(parsed, dict):
+            extracted: list[str] = []
+            for item in parsed.values():
+                normalized = str(item).strip()
+                if normalized:
+                    extracted.append(normalized)
+            return extracted
+
+        if isinstance(parsed, str) and parsed.startswith("gid://shopify/"):
+            return [parsed.rsplit("/", 1)[-1].replace("-", " ")]
+
+        return [str(parsed).strip()]
 
     def _parse_iso_datetime(self, value: Any) -> Optional[datetime]:
         if not value:

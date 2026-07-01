@@ -256,8 +256,17 @@ class RecommendationService:
         return [
             product
             for product in catalog
-            if self.normalize_product_segment(product) == required_segment
+            if self._product_segment_compatible(product, required_segment)
         ]
+
+    def _product_segment_compatible(self, product: dict, required_segment: str) -> bool:
+        if required_segment not in self.strict_segments:
+            return False
+        segment = self.normalize_product_segment(product)
+        return segment == required_segment or segment == "unknown"
+
+    def _segment_rank(self, product: dict, required_segment: str) -> int:
+        return 1 if self.normalize_product_segment(product) == required_segment else 0
 
     def _score_product(
         self,
@@ -314,6 +323,8 @@ class RecommendationService:
         if target_segment in self.strict_segments:
             if segment == target_segment:
                 style_bonus += 4
+            elif segment == "unknown":
+                style_bonus += 0
             else:
                 style_bonus -= 12
 
@@ -333,6 +344,7 @@ class RecommendationService:
             "matched_terms": sorted(matched_terms),
             "bucket": bucket,
             "segment": segment,
+            "segment_rank": 1 if segment == target_segment else 0,
         }
 
     def _select_products(
@@ -909,7 +921,7 @@ class RecommendationService:
         shopper_profile: Optional[ShopperProfile],
         target_segment: str,
     ) -> bool:
-        if self.normalize_product_segment(item) != target_segment:
+        if not self._product_segment_compatible(item, target_segment):
             return False
         if self._complete_look_palette_score(
             product_colors=item.get("product_colors", []),
@@ -944,7 +956,7 @@ class RecommendationService:
         shopper_profile: Optional[ShopperProfile],
         target_segment: str,
     ) -> bool:
-        if self.normalize_product_segment(item) != target_segment:
+        if not self._product_segment_compatible(item, target_segment):
             return False
         if self._complete_look_palette_score(
             product_colors=item.get("product_colors", []),
@@ -1262,7 +1274,7 @@ class RecommendationService:
         shopper_profile: ShopperProfile,
         image_analysis: ImageAnalysisSummary,
     ) -> bool:
-        if self.normalize_product_segment(item) != required_segment:
+        if not self._product_segment_compatible(item, required_segment):
             return False
         if item.get("bucket") not in target_buckets:
             return False
@@ -1374,9 +1386,15 @@ class RecommendationService:
                     "score": base["score"] + palette_score + context_score,
                 }
             )
-        scored_products = [item for item in scored_products if item["segment"] == target_segment]
+        scored_products = [item for item in scored_products if self._product_segment_compatible(item, target_segment)]
         scored_products.sort(
-            key=lambda item: (item["score"], item["context_score"], item["palette_score"], item["match_score"]),
+            key=lambda item: (
+                item["segment_rank"],
+                item["score"],
+                item["context_score"],
+                item["palette_score"],
+                item["match_score"],
+            ),
             reverse=True,
         )
 
@@ -1413,7 +1431,7 @@ class RecommendationService:
                     self._select_products(fill_pool, limit - len(selected), complementary, query_bucket, target_segment)
                 )
         selected = self._enrich_selected_products(selected)
-        selected = [item for item in selected if self.normalize_product_segment(item) == target_segment]
+        selected = [item for item in selected if self._product_segment_compatible(item, target_segment)]
 
         return [
             ProductRecommendation(
@@ -1432,6 +1450,7 @@ class RecommendationService:
                 price=self._price_text(item.get("price")),
                 product_url=self._product_url(item),
                 cart_variant_id=item.get("shopify_variant_id") or None,
+                **self._inventory_fields(item),
             )
             for item in selected
         ]
@@ -1528,6 +1547,7 @@ class RecommendationService:
 
         scored_products.sort(
             key=lambda item: (
+                item["segment_rank"],
                 item["score"],
                 item["palette_score"],
                 item["context_score"],
@@ -1593,9 +1613,10 @@ class RecommendationService:
                 price=self._price_text(item.get("price")),
                 product_url=self._product_url(item),
                 cart_variant_id=item.get("shopify_variant_id") or None,
+                **self._inventory_fields(item),
             )
             for item in selected
-            if self.normalize_product_segment(item) == required_segment
+            if self._product_segment_compatible(item, required_segment)
         ]
 
     def recommend_inspired_look_products(
@@ -1704,6 +1725,7 @@ class RecommendationService:
 
         hero_pool.sort(
             key=lambda item: (
+                item["segment_rank"],
                 item["score"],
                 item["palette_score"],
                 item["style_score"],
@@ -1781,6 +1803,7 @@ class RecommendationService:
 
         support_scored.sort(
             key=lambda item: (
+                item["segment_rank"],
                 item["score"],
                 item["context_score"],
                 item["palette_score"],
@@ -1866,6 +1889,7 @@ class RecommendationService:
                 price=self._price_text(hero_candidate.get("price")),
                 product_url=self._product_url(hero_candidate),
                 cart_variant_id=hero_candidate.get("shopify_variant_id") or None,
+                **self._inventory_fields(hero_candidate),
             )
         ]
 
@@ -1898,6 +1922,7 @@ class RecommendationService:
                     price=self._price_text(item.get("price")),
                     product_url=self._product_url(item),
                     cart_variant_id=item.get("shopify_variant_id") or None,
+                    **self._inventory_fields(item),
                 )
             )
 
@@ -2351,7 +2376,7 @@ class RecommendationService:
         anchor_bucket: str,
         palette_strategy: dict,
     ) -> bool:
-        if self.normalize_product_segment(item) != required_segment:
+        if not self._product_segment_compatible(item, required_segment):
             return False
         if item.get("bucket") != anchor_bucket:
             return False
@@ -2376,7 +2401,7 @@ class RecommendationService:
         visible_buckets: list[str],
         orchestration_context: Optional[dict],
     ) -> bool:
-        if self.normalize_product_segment(item) != required_segment:
+        if not self._product_segment_compatible(item, required_segment):
             return False
         if item.get("bucket") not in supporting_targets:
             return False
@@ -2542,12 +2567,27 @@ class RecommendationService:
 
         return None
 
+    def _inventory_fields(self, item: dict) -> dict:
+        return {
+            "sku": item.get("sku"),
+            "available_for_sale": item.get("available_for_sale"),
+            "inventory_quantity": item.get("inventory_quantity"),
+            "inventory_policy": item.get("inventory_policy"),
+            "inventory_tracked": item.get("inventory_tracked"),
+        }
+
     def _enrich_selected_products(self, selected: list[dict]) -> list[dict]:
         missing_ids = [
             item.get("shopify_product_id")
             for item in selected
             if item.get("shopify_product_id")
-            and (not item.get("handle") or not item.get("shopify_variant_id") or not item.get("product_url"))
+            and (
+                not item.get("handle")
+                or not item.get("shopify_variant_id")
+                or not item.get("product_url")
+                or item.get("available_for_sale") is None
+                or item.get("inventory_quantity") is None
+            )
         ]
 
         if not missing_ids:
@@ -2567,6 +2607,23 @@ class RecommendationService:
                     "handle": item.get("handle") or detail.get("handle"),
                     "product_url": item.get("product_url") or detail.get("product_url"),
                     "shopify_variant_id": item.get("shopify_variant_id") or detail.get("shopify_variant_id"),
+                    "sku": item.get("sku") or detail.get("sku"),
+                    "available_for_sale": (
+                        item.get("available_for_sale")
+                        if item.get("available_for_sale") is not None
+                        else detail.get("available_for_sale")
+                    ),
+                    "inventory_quantity": (
+                        item.get("inventory_quantity")
+                        if item.get("inventory_quantity") is not None
+                        else detail.get("inventory_quantity")
+                    ),
+                    "inventory_policy": item.get("inventory_policy") or detail.get("inventory_policy"),
+                    "inventory_tracked": (
+                        item.get("inventory_tracked")
+                        if item.get("inventory_tracked") is not None
+                        else detail.get("inventory_tracked")
+                    ),
                 }
             )
 
@@ -2695,6 +2752,7 @@ class RecommendationService:
                 price=self._price_text(item.get("price")),
                 product_url=self._product_url(item),
                 cart_variant_id=item.get("shopify_variant_id") or None,
+                **self._inventory_fields(item),
             )
             for item in selected
         ]
@@ -3563,7 +3621,7 @@ class RecommendationService:
                     ):
                         continue
                 else:
-                    if self.normalize_product_segment(candidate) != target_segment:
+                    if not self._product_segment_compatible(candidate, target_segment):
                         continue
                     if palette_score < 0:
                         continue
@@ -3625,6 +3683,7 @@ class RecommendationService:
             price=self._price_text(replacement_source.get("price")),
             product_url=self._product_url(replacement_source),
             cart_variant_id=replacement_source.get("shopify_variant_id") or None,
+            **self._inventory_fields(replacement_source),
         )
 
         updated = list(current_products)

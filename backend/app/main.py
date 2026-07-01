@@ -20,8 +20,9 @@ app = FastAPI(
     description="Starter API for the StyledGenie B2B Intelligence System MVP.",
 )
 
-repo_root = Path(__file__).resolve().parent.parent
-merchant_dashboard_dir = repo_root / "merchant-dashboard"
+backend_root = Path(__file__).resolve().parent.parent
+repo_root = backend_root.parent
+merchant_dashboard_dir = backend_root / "merchant-dashboard"
 storefront_widget_dir = repo_root / "apps" / "storefront-widget"
 
 app.add_middleware(
@@ -45,7 +46,7 @@ if merchant_dashboard_dir.exists():
 if storefront_widget_dir.exists():
     app.mount("/storefront-widget-demo", StaticFiles(directory=storefront_widget_dir, html=True), name="storefront-widget-demo")
 
-app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent.parent / "static"), name="static")
+app.mount("/static", StaticFiles(directory=backend_root / "static"), name="static")
 
 @app.get("/", include_in_schema=False)
 def root_redirect() -> RedirectResponse:

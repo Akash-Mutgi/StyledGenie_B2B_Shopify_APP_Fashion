@@ -18,6 +18,11 @@ class ProductRecommendation(BaseModel):
     price: Optional[str] = None
     product_url: Optional[str] = None
     cart_variant_id: Optional[str] = None
+    sku: Optional[str] = None
+    available_for_sale: Optional[bool] = None
+    inventory_quantity: Optional[int] = None
+    inventory_policy: Optional[str] = None
+    inventory_tracked: Optional[bool] = None
 
 
 class ShopperProfileInput(BaseModel):
@@ -461,11 +466,45 @@ class CatalogProductOption(BaseModel):
     category: str
     price: Optional[str] = None
     image_url: Optional[str] = None
+    image_urls: list[str] = Field(default_factory=list)
     product_url: Optional[str] = None
+    handle: Optional[str] = None
+    shopify_legacy_id: Optional[str] = None
+    shopify_variant_id: Optional[str] = None
+    sku: Optional[str] = None
+    available_for_sale: Optional[bool] = None
+    inventory_quantity: Optional[int] = None
+    inventory_policy: Optional[str] = None
+    inventory_tracked: Optional[bool] = None
+    tags: list[str] = Field(default_factory=list)
+    metafields: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class CatalogProductListResponse(BaseModel):
     items: list[CatalogProductOption] = Field(default_factory=list)
+
+
+class CatalogProductDetail(BaseModel):
+    id: Optional[str] = None
+    shopify_product_id: str
+    shopify_legacy_id: Optional[str] = None
+    title: str
+    category: str
+    description: Optional[str] = None
+    price: Optional[str] = None
+    image_url: Optional[str] = None
+    image_urls: list[str] = Field(default_factory=list)
+    product_url: Optional[str] = None
+    handle: Optional[str] = None
+    shopify_variant_id: Optional[str] = None
+    sku: Optional[str] = None
+    available_for_sale: Optional[bool] = None
+    inventory_quantity: Optional[int] = None
+    inventory_policy: Optional[str] = None
+    inventory_tracked: Optional[bool] = None
+    tags: list[str] = Field(default_factory=list)
+    metafields: dict[str, list[str]] = Field(default_factory=dict)
+    source: str = "synced_catalog"
 
 
 class ProductDescriptionDraftRequest(BaseModel):
