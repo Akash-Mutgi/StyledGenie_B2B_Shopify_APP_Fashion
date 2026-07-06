@@ -405,42 +405,123 @@ const INSPIRE_STYLE_CATEGORIES = [
   },
 ];
 
+function createDemoFashionSvg(type, fill = "#f5d66c", accent = "#111827") {
+  const svgWrap = (body, width = 240, height = 300) =>
+    `data:image/svg+xml;utf8,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" rx="22" fill="#fff"/><g>${body}</g></svg>`
+    )}`;
+
+  if (type === "sweater") {
+    return svgWrap(`<path d="M82 78c10-21 67-21 76 0l33 63-24 14-18-36 5 118H86l5-118-18 36-24-14 33-63z" fill="${fill}"/><path d="M96 71c9 20 39 20 48 0" fill="none" stroke="#fff3bd" stroke-width="12" stroke-linecap="round"/><path d="M87 104c19 12 48 13 68 0" fill="none" stroke="#eecf4f" stroke-width="4" opacity=".5"/><path d="M88 149h66M88 184h66" stroke="#efcf52" stroke-width="4" opacity=".42"/><path d="M93 235h54" stroke="#d2b84c" stroke-width="7" stroke-linecap="round" opacity=".35"/>`);
+  }
+  if (type === "denim") {
+    return svgWrap(`<path d="M78 58h84l-7 205h-36l-6-116-14 116H63L78 58z" fill="${fill}"/><path d="M78 58h84l-5 34H75l3-34z" fill="#111827" opacity=".2"/><path d="M120 92l-7 55M100 72v177M141 72v177" stroke="#dae4ff" stroke-width="4" opacity=".45"/>`);
+  }
+  if (type === "purse") {
+    return svgWrap(`<path d="M75 126c6-30 85-30 91 0l19 95c4 20-10 36-31 36H86c-21 0-35-16-31-36l20-95z" fill="${fill}"/><path d="M88 132c5-55 59-55 64 0" fill="none" stroke="${accent}" stroke-width="8" stroke-linecap="round"/><rect x="108" y="167" width="25" height="18" rx="4" fill="#d7b56d"/>`);
+  }
+  if (type === "sneaker") {
+    return svgWrap(`<path d="M54 186c42-7 62-28 84-66 20 19 36 34 58 43 21 9 31 24 27 43-3 14-15 22-34 22H70c-23 0-32-10-16-42z" fill="#f8f6ef"/><path d="M64 214h151" stroke="#111827" stroke-width="8" stroke-linecap="round"/><path d="M113 146l47 33M101 158l38 27" stroke="#b9c0cb" stroke-width="5" stroke-linecap="round"/><path d="M150 151c18 4 32 8 45 13" stroke="${fill}" stroke-width="8" stroke-linecap="round"/>`);
+  }
+  if (type === "tank") {
+    return svgWrap(`<path d="M78 66h30c2 32 22 32 25 0h30l25 184H53L78 66z" fill="${fill}"/><path d="M86 66c8 34 58 34 68 0" fill="none" stroke="${accent}" stroke-width="7" stroke-linecap="round"/><path d="M78 66L62 96M163 66l15 30" stroke="${accent}" stroke-width="7" stroke-linecap="round"/>`);
+  }
+  if (type === "trousers") {
+    return svgWrap(`<path d="M76 52h88l-5 212h-36l-4-116-17 116H65L76 52z" fill="${fill}"/><path d="M77 52h86v32H75l2-32z" fill="#000" opacity=".18"/><path d="M120 85l-1 63M96 84l-15 168M143 84l3 168" stroke="#ffffff" stroke-width="4" opacity=".25"/>`);
+  }
+  if (type === "loafer") {
+    return svgWrap(`<path d="M45 186c34-16 58-43 79-75 29 24 57 42 91 50 22 5 31 21 24 41-6 17-22 25-45 25H69c-29 0-39-16-24-41z" fill="${fill}"/><path d="M69 212h151" stroke="#611827" stroke-width="8" stroke-linecap="round"/><path d="M121 133c24 19 50 31 78 39" stroke="#f4a4a4" stroke-width="6" stroke-linecap="round"/>`);
+  }
+  if (type === "dress") {
+    return svgWrap(`<path d="M92 58h56l19 54-20 10-8-25 33 160H68l33-160-8 25-20-10 19-54z" fill="${fill}"/><path d="M101 58c6 21 32 21 38 0" fill="none" stroke="${accent}" stroke-width="7" stroke-linecap="round"/><path d="M90 148c20 10 43 10 68 0" stroke="#fff" stroke-width="5" opacity=".35"/>`);
+  }
+  if (type === "jacket") {
+    return svgWrap(`<path d="M79 67h33l8 30 8-30h33l33 184h-54l-20-96-20 96H46L79 67z" fill="${fill}"/><path d="M92 74l28 52 28-52M120 97v150" fill="none" stroke="${accent}" stroke-width="7" stroke-linecap="round"/><path d="M75 123h91M68 162h104" stroke="#2b211b" stroke-width="5" opacity=".4"/>`);
+  }
+  if (type === "skirt") {
+    return svgWrap(`<path d="M82 76h76l28 180H54L82 76z" fill="${fill}"/><path d="M82 76h76v28H82z" fill="${accent}" opacity=".14"/><path d="M101 108l-18 132M120 108v132M139 108l18 132" stroke="#fff" stroke-width="5" opacity=".42"/>`);
+  }
+  if (type === "glasses") {
+    return svgWrap(`<path d="M48 145c25-18 51-18 79 0M113 145c25-18 51-18 79 0" fill="none" stroke="${fill}" stroke-width="10" stroke-linecap="round"/><circle cx="82" cy="158" r="32" fill="#d6cbb2" opacity=".8" stroke="${accent}" stroke-width="7"/><circle cx="158" cy="158" r="32" fill="#d6cbb2" opacity=".8" stroke="${accent}" stroke-width="7"/><path d="M114 158h12" stroke="${accent}" stroke-width="7" stroke-linecap="round"/>`);
+  }
+  if (type === "watch") {
+    return svgWrap(`<path d="M99 31h42l-8 71H107L99 31zM107 198h26l8 71H99l8-71z" fill="#e7d9a7"/><path d="M109 31h9v68h-9zM124 31h9v68h-9zM109 201h9v68h-9zM124 201h9v68h-9z" fill="#24324b"/><rect x="75" y="91" width="90" height="116" rx="18" fill="#e9d9a3" stroke="#273044" stroke-width="8"/><rect x="90" y="106" width="60" height="86" rx="10" fill="#fff"/><path d="M98 121h44M98 176h44M120 116v66M104 148h32" stroke="#30405f" stroke-width="3" opacity=".45"/><path d="M120 149l17-13M120 149l-12 21" stroke="#273044" stroke-width="4" stroke-linecap="round"/><circle cx="120" cy="149" r="4" fill="#273044"/>`);
+  }
+  return svgWrap(`<circle cx="120" cy="150" r="78" fill="${fill}"/>`);
+}
+
+const DEMO_OUTFIT_IMAGES = {
+  sweater: "./assets/swap/sweater.png",
+  denim: "./assets/swap/denim.png",
+  purse: "./assets/swap/navy-bag.png",
+  sneakers: "./assets/swap/sneakers.png",
+  tank: createDemoFashionSvg("tank", "#f9f2dc", "#a93636"),
+  creamTrousers: createDemoFashionSvg("trousers", "#f5eee1"),
+  blackPant: "./assets/swap/black-pant.png",
+  rustPant: "./assets/swap/rust-pant.png",
+  navyPant: "./assets/swap/navy-pant.png",
+  redPurse: createDemoFashionSvg("purse", "#b6112e"),
+  redLoafer: createDemoFashionSvg("loafer", "#c62530"),
+  glasses: createDemoFashionSvg("glasses", "#b8a786", "#8a7864"),
+  watch: createDemoFashionSvg("watch", "#d8c47d", "#1f2937"),
+  orangeTop: "./assets/complete/orange-halter-top.png",
+  checkedJacket: "./assets/complete/checked-jacket.png",
+  beadedDress: "./assets/complete/beaded-dress.png",
+  floralSkirt: "./assets/complete/floral-midi-skirt.png",
+  greyTrouser: "./assets/complete/grey-trousers.png",
+  wideLegPants: "./assets/complete/wide-leg-pants.png",
+  blueJeans: "./assets/complete/blue-jeans.png",
+  pinkPullover: "./assets/complete/pink-pullover.png",
+  blueKnit: "./assets/complete/blue-knit-jacket.png",
+  stripedJacket: "./assets/complete/striped-jacket.png",
+  brownBoot: "./assets/complete/casual-cool-outfit.png",
+  softGirlOutfit: "./assets/complete/soft-girl-outfit.png",
+  summerChicOutfit: "./assets/complete/summer-chic-outfit.png",
+};
+const DEMO_REFERENCE_FLATLAY_IMAGE = "./assets/reference-outfit-flatlay.png";
+const DEMO_SWAP_FLATLAY_IMAGES = {
+  cream: "./assets/swap/swap-flatlay-cream.png",
+  black: "./assets/swap/swap-flatlay-black.png",
+  rust: "./assets/swap/swap-flatlay-rust.png",
+  navy: "./assets/swap/swap-flatlay-navy.png",
+};
+
 const DEMO_LOOKS = {
   outfit: [
     {
       id: "demo-outfit-top",
-      title: "Silk Wrap Blouse",
+      title: "Sweater",
       category: "Top",
-      price: 89,
-      image_url: "https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=480&h=640&fit=crop",
-      reason: "Soft drape balances the tailored bottom.",
+      price: 18,
+      image_url: DEMO_OUTFIT_IMAGES.sweater,
+      reason: "Neutral tones suit your warm skin",
       support_slot: "Top",
     },
     {
       id: "demo-outfit-bottom",
-      title: "High-Rise Wide Trousers",
-      category: "Bottom",
-      price: 120,
-      image_url: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=480&h=640&fit=crop",
-      reason: "Elongates the line and keeps the look polished.",
+      title: "Denim",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.denim,
+      reason: "High waist flatters your shape",
       support_slot: "Bottom",
     },
     {
       id: "demo-outfit-shoes",
-      title: "Leather Slingback Heels",
+      title: "Sneakers",
       category: "Shoes",
-      price: 145,
-      image_url: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=480&h=640&fit=crop",
-      reason: "Adds height without overpowering the silhouette.",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.sneakers,
+      reason: "Keeps the look walkable for a city day",
       support_slot: "Shoes",
     },
     {
       id: "demo-outfit-bag",
-      title: "Structured Mini Tote",
+      title: "Blue purse",
       category: "Bag",
-      price: 98,
-      image_url: "https://images.unsplash.com/photo-1564422170194-d607412817b?w=480&h=640&fit=crop",
-      reason: "Finishes the look with clean structure.",
+      price: 27,
+      image_url: DEMO_OUTFIT_IMAGES.purse,
+      reason: "The navy bag keeps the outfit polished",
       support_slot: "Bag",
     },
   ],
@@ -525,39 +606,83 @@ const DEMO_LOOKS = {
 };
 
 const DEMO_SWAP_ALTERNATIVES = {
+  top: [
+    {
+      id: "demo-swap-top-1",
+      title: "Cream tank",
+      category: "Top",
+      price: 18,
+      image_url: DEMO_OUTFIT_IMAGES.tank,
+      support_slot: "Top",
+    },
+  ],
+  trousers: [
+    {
+      id: "demo-swap-trousers-1",
+      title: "Cream pant",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.creamTrousers,
+      support_slot: "Bottom",
+    },
+    {
+      id: "demo-swap-trousers-2",
+      title: "Black pant",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.blackPant,
+      support_slot: "Bottom",
+    },
+    {
+      id: "demo-swap-trousers-3",
+      title: "Rust pant",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.rustPant,
+      support_slot: "Bottom",
+    },
+    {
+      id: "demo-swap-trousers-4",
+      title: "Navy pant",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.navyPant,
+      support_slot: "Bottom",
+    },
+  ],
   shoes: [
     {
       id: "demo-swap-shoes-1",
-      title: "White Sneakers",
+      title: "Red loafers",
       category: "Shoes",
-      price: 95,
-      image_url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=480&h=640&fit=crop",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.redLoafer,
       support_slot: "Shoes",
     },
     {
       id: "demo-swap-shoes-2",
-      title: "Ankle Boots",
+      title: "Sneakers",
       category: "Shoes",
-      price: 135,
-      image_url: "https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=480&h=640&fit=crop",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.sneakers,
       support_slot: "Shoes",
     },
   ],
   bag: [
     {
       id: "demo-swap-bag-1",
-      title: "Chain Shoulder Bag",
+      title: "Red purse",
       category: "Bag",
-      price: 102,
-      image_url: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=480&h=640&fit=crop",
+      price: 27,
+      image_url: DEMO_OUTFIT_IMAGES.redPurse,
       support_slot: "Bag",
     },
     {
       id: "demo-swap-bag-2",
-      title: "Woven Tote",
+      title: "Blue purse",
       category: "Bag",
-      price: 68,
-      image_url: "https://images.unsplash.com/photo-1591561954557-26941169b49a?w=480&h=640&fit=crop",
+      price: 27,
+      image_url: DEMO_OUTFIT_IMAGES.purse,
       support_slot: "Bag",
     },
   ],
@@ -748,9 +873,11 @@ async function maybeShowShopifyProductPreview() {
 }
 
 function getDemoProducts(mode) {
-  return (DEMO_LOOKS[mode] || DEMO_LOOKS.outfit).map((item) => ({
+  return (DEMO_LOOKS[mode] || DEMO_LOOKS.outfit).map((item, index) => ({
     ...item,
     segment: "womenswear",
+    cart_variant_id: item.cart_variant_id || `demo-${mode}-${index + 1}`,
+    available_for_sale: true,
   }));
 }
 
@@ -855,6 +982,67 @@ function buildLookCompositionVisual(products, options = {}) {
   });
 
   visual.append(leadWrap, thumbStack);
+  return visual;
+}
+
+function appendDemoCollageImage(parent, product, className, altText = "") {
+  const image = document.createElement("img");
+  image.className = className;
+  image.src = product && product.image_url ? product.image_url : "";
+  image.alt = altText || (product && product.title) || "Outfit item";
+  image.loading = "lazy";
+  parent.appendChild(image);
+}
+
+function buildDemoOutfitCollageVisual(products) {
+  const visual = document.createElement("div");
+  visual.className = "demo-outfit-collage demo-outfit-collage--image";
+
+  const image = document.createElement("img");
+  image.className = "demo-outfit-reference-image";
+  image.src = DEMO_REFERENCE_FLATLAY_IMAGE;
+  image.alt = "Yellow sweater, dark denim, navy bag, jewelry, watch, and sneakers outfit flat lay";
+  image.loading = "lazy";
+  visual.appendChild(image);
+
+  return visual;
+}
+
+function getSwapFlatlayVariant(product) {
+  const text = [
+    product && product.id,
+    product && product.title,
+    product && product.category,
+    product && product.image_url,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (text.includes("rust") || text.includes("brown")) {
+    return "rust";
+  }
+  if (text.includes("navy") || text.includes("blue")) {
+    return "navy";
+  }
+  if (text.includes("black")) {
+    return "black";
+  }
+  return "cream";
+}
+
+function buildDemoSwapFlatlayVisual(selectedPant = null) {
+  const visual = document.createElement("div");
+  visual.className = "demo-outfit-collage demo-outfit-collage--image demo-swap-flatlay";
+
+  const variant = getSwapFlatlayVariant(selectedPant);
+  const image = document.createElement("img");
+  image.className = "demo-outfit-reference-image";
+  image.src = DEMO_SWAP_FLATLAY_IMAGES[variant] || DEMO_SWAP_FLATLAY_IMAGES.cream;
+  image.alt = "Cream tank, red bag, red loafers, sunglasses, and selected trousers outfit flat lay";
+  image.loading = "lazy";
+  visual.appendChild(image);
+
   return visual;
 }
 
@@ -1275,8 +1463,33 @@ function isValidEmail(value) {
 
 function setAuthUiActive(active) {
   authViewActive = active;
+  if (active) {
+    homeViewActive = false;
+    onboardingActive = false;
+    onboardingStep = null;
+    onboardingCameraMode = false;
+    swapScreenActive = false;
+    if (chatLog) {
+      chatLog.innerHTML = "";
+    }
+    if (onboardingScreen) {
+      onboardingScreen.classList.add("hidden");
+    }
+    if (onboardingLoadingScreen) {
+      onboardingLoadingScreen.classList.add("hidden");
+    }
+    if (swapScreen) {
+      swapScreen.classList.add("hidden");
+    }
+    if (cameraCard) {
+      cameraCard.classList.add("hidden");
+    }
+  }
   if (widgetPanel) {
     widgetPanel.classList.toggle("auth-active", active);
+    widgetPanel.classList.toggle("onboarding-active", false);
+    widgetPanel.classList.toggle("camera-active", false);
+    widgetPanel.classList.toggle("camera-scan-mode", false);
     if (active) {
       widgetPanel.dataset.mode = "auth";
     }
@@ -1309,6 +1522,13 @@ function hideAuthScreen() {
   setAuthUiActive(false);
 }
 
+function continueFromAuthToOnboarding(session) {
+  applyAuthIdentity(session);
+  hideAuthScreen();
+  resetOnboardingStatusForCurrentUser();
+  startOnboardingFlow();
+}
+
 function renderAuthView(step) {
   if (!authBody) {
     return;
@@ -1319,7 +1539,7 @@ function renderAuthView(step) {
   const hero = document.createElement("div");
   hero.className = "auth-hero";
   hero.innerHTML =
-    '<div class="auth-logo">StyledGenie</div><p class="auth-tagline">Sign in to unlock your personal stylist.</p>';
+    '<div class="auth-mark" aria-hidden="true">SG</div><div class="auth-logo">StyledGenie</div><p class="auth-tagline">Sign in to unlock your personal stylist.</p>';
 
   const wrap = document.createElement("div");
   wrap.className = "auth-form-wrap";
@@ -1401,9 +1621,7 @@ function buildAuthLoginForm() {
     }
 
     const session = saveAuthSession(demoUser, rememberMe);
-    applyAuthIdentity(session);
-    hideAuthScreen();
-    enterAuthenticatedApp();
+    continueFromAuthToOnboarding(session);
   });
 
   const footer = document.createElement("p");
@@ -1419,7 +1637,17 @@ function buildAuthLoginForm() {
   demoHint.className = "auth-demo-hint";
   demoHint.textContent = "Demo: demo@styledgenie.com / demo123";
 
-  fragment.append(errorNode, emailField, passwordField, row, submitBtn, footer, demoHint);
+  const demoBtn = document.createElement("button");
+  demoBtn.type = "button";
+  demoBtn.className = "auth-demo-button";
+  demoBtn.textContent = "Continue with demo";
+  demoBtn.addEventListener("click", () => {
+    const demoUser = DEMO_USERS[0];
+    const session = saveAuthSession(demoUser, false);
+    continueFromAuthToOnboarding(session);
+  });
+
+  fragment.append(errorNode, emailField, passwordField, row, submitBtn, demoBtn, footer, demoHint);
   return fragment;
 }
 
@@ -1471,9 +1699,7 @@ function buildAuthSignupForm() {
     }
 
     const session = saveAuthSession({ email, firstName, lastName }, false);
-    applyAuthIdentity(session);
-    hideAuthScreen();
-    enterAuthenticatedApp();
+    continueFromAuthToOnboarding(session);
   });
 
   const footer = document.createElement("p");
@@ -1872,8 +2098,7 @@ function buildOnboardingBotMessage(text) {
   const avatar = document.createElement("span");
   avatar.className = "onboarding-bot-avatar";
   avatar.setAttribute("aria-hidden", "true");
-  avatar.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="url(#obGrad)"/><defs><linearGradient id="obGrad" x1="0" y1="0" x2="24" y2="24"><stop stop-color="#e879a9"/><stop offset="1" stop-color="#9333ea"/></linearGradient></defs></svg>';
+  avatar.innerHTML = BOT_AVATAR_LOGO;
   const bubble = document.createElement("p");
   bubble.className = "onboarding-bot-bubble";
   bubble.textContent = text;
@@ -2737,9 +2962,23 @@ function appendMessageTimestamp(bubble, timeText = formatMessageTime()) {
 }
 
 const BOT_AVATAR_LOGO = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-  <circle cx="9" cy="12" r="4.5" stroke="white" stroke-width="1.6"/>
-  <circle cx="15" cy="12" r="4.5" stroke="white" stroke-width="1.6"/>
-  <circle cx="12" cy="8" r="3.5" stroke="white" stroke-width="1.6"/>
+  <defs>
+    <linearGradient id="genieBotAvatarGradient" x1="5" y1="3" x2="19" y2="21" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f06fd8"/>
+      <stop offset="0.48" stop-color="#c45cf3"/>
+      <stop offset="1" stop-color="#8d4df7"/>
+    </linearGradient>
+    <filter id="genieBotAvatarShadow" x="-4" y="-2" width="32" height="32" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#8d4df7" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <circle cx="12" cy="12" r="10.8" fill="url(#genieBotAvatarGradient)" filter="url(#genieBotAvatarShadow)"/>
+  <g stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="7.95" r="3.05"/>
+    <circle cx="8.35" cy="14.25" r="3.05"/>
+    <circle cx="15.65" cy="14.25" r="3.05"/>
+    <path d="M10.45 10.6 9.9 11.55M13.55 10.6l.55.95M11.4 14.25h1.2"/>
+  </g>
 </svg>`;
 
 function escapePattern(label) {
@@ -3074,6 +3313,8 @@ function addSuggestionChips(options, onSelect, variant = "default") {
   panel.appendChild(row);
   chatLog.appendChild(panel);
   scrollChatToBottom();
+  requestAnimationFrame(scrollChatToBottom);
+  window.setTimeout(scrollChatToBottom, 120);
 }
 
 function addInlineLinkInput(placeholder, onSubmit) {
@@ -3116,7 +3357,7 @@ function clearActivePromptPanels() {
   chatLog
     .querySelectorAll(
       ".suggestion-strip, .next-step-panel, .feedback-panel, .inline-input-panel, .inspire-upload-panel, .inspire-loading-panel, .care-panel"
-        + ", .outfit-builder-panel"
+        + ", .outfit-builder-panel, .inspire-demo-grid-panel, .outfit-swap-selection-panel, .outfit-swap-options-panel"
     )
     .forEach((node) => {
       node.remove();
@@ -3498,6 +3739,30 @@ function getHomeOpenerMessage() {
 
 function showHomeFeatureCards() {
   homeViewActive = true;
+  onboardingActive = false;
+  onboardingStep = null;
+  authViewActive = false;
+  swapScreenActive = false;
+  onboardingCameraMode = false;
+  if (widgetPanel) {
+    widgetPanel.classList.remove("onboarding-active", "auth-active", "camera-active", "camera-scan-mode");
+    widgetPanel.dataset.mode = "home";
+  }
+  if (onboardingScreen) {
+    onboardingScreen.classList.add("hidden");
+  }
+  if (onboardingLoadingScreen) {
+    onboardingLoadingScreen.classList.add("hidden");
+  }
+  if (authScreen) {
+    authScreen.classList.add("hidden");
+  }
+  if (swapScreen) {
+    swapScreen.classList.add("hidden");
+  }
+  if (cameraCard) {
+    cameraCard.classList.add("hidden");
+  }
   if (chatLog) {
     chatLog.innerHTML = "";
   }
@@ -3509,21 +3774,21 @@ function showHomeFeatureCards() {
 function getOpenerSuggestions() {
   return [
     {
-      label: "Create full outfit",
+      label: "Create Full Outfit",
       description: "Build a full look from occasion, style, and budget.",
       action: "mode",
       mode: "outfit",
       icon: "outfit",
     },
     {
-      label: "Complete my look",
+      label: "Complete my Look",
       description: "Have a piece? Find perfect items to match it.",
       action: "mode",
       mode: "complete",
       icon: "camera",
     },
     {
-      label: "Get inspired",
+      label: "Get Inspired",
       description: "Browse trends, upload inspiration, and discover looks.",
       action: "mode",
       mode: "inspire",
@@ -3728,20 +3993,46 @@ function getSupportTopicSuggestions() {
 
 const CARE_MENU_ACTIONS = [
   { label: "Track my order", icon: "track", flow: "track" },
-  { label: "Return or exchange", icon: "return", flow: "return" },
+  { label: "Return or exchanges", icon: "return", flow: "return" },
   { label: "FAQ's", icon: "faq", flow: "faq" },
   { label: "Talk to agent", icon: "agent", flow: "agent" },
 ];
+
+function createCareProductImageSvg(type, fill, accent = "#ffffff") {
+  const shapes = {
+    top:
+      `<path d="M72 36l-20 12-17-15-18 18 18 25v55h74V76l18-25-18-18-17 15-20-12z" fill="${fill}"/><path d="M53 48c7 8 31 8 38 0" fill="none" stroke="${accent}" stroke-width="5" stroke-linecap="round"/>`,
+    skirt:
+      `<path d="M50 38h56l10 98H40L50 38z" fill="${fill}"/><path d="M54 44h48M62 50l-8 80M78 50l-3 80M94 50l3 80" stroke="${accent}" stroke-width="4" stroke-linecap="round" opacity=".55"/>`,
+    jacket:
+      `<path d="M50 35l22 15 22-15 27 20-13 29v52H36V84L23 55l27-20z" fill="${fill}"/><path d="M72 50v86M72 50L54 84M72 50l18 34" stroke="${accent}" stroke-width="5" stroke-linecap="round"/><path d="M49 93h14M82 93h14" stroke="${accent}" stroke-width="4" stroke-linecap="round"/>`,
+    dress:
+      `<path d="M60 34h48l-10 39 27 63H43l27-63-10-39z" fill="${fill}"/><path d="M68 39c6 9 26 9 32 0M69 75h30" stroke="${accent}" stroke-width="5" stroke-linecap="round" opacity=".7"/>`,
+  };
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 170"><rect width="150" height="170" rx="18" fill="#f8f8f8"/>${shapes[type] || shapes.top}</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+const CARE_PRODUCT_IMAGES = {
+  blueTop: "./assets/care/blue-top.png",
+  yellowSkirt: "./assets/care/yellow-skirt.png",
+  jacket: "./assets/care/jacket.png",
+  orangeDress: "./assets/care/orange-dress.png",
+};
 
 const CARE_DEMO_ORDERS = [
   {
     id: "ord-1042",
     orderRef: "#1042",
-    title: "Silk yellow skirt",
-    size: "M",
-    color: "Butter yellow",
-    price: 50,
-    imageTone: "#f4d35e",
+    title: "Blue top",
+    size: "S",
+    color: "Sky blue",
+    price: 38,
+    orderDate: "Ordered Feb 10, 2026",
+    statusLabel: "Shipped",
+    imageTone: "#9bd7f2",
+    image_url: CARE_PRODUCT_IMAGES.blueTop,
     status: "in_transit",
     eta: "Jun 20, 2026",
     trackingStage: 2,
@@ -3749,42 +4040,52 @@ const CARE_DEMO_ORDERS = [
   {
     id: "ord-1038",
     orderRef: "#1038",
-    title: "Lilac wrap top",
-    size: "S",
-    color: "Soft lilac",
-    price: 42,
-    imageTone: "#c4b5fd",
+    title: "Silk yellow skirt",
+    size: "M",
+    color: "Butter yellow",
+    orderNumber: "BR20482",
+    price: 50,
+    orderDate: "Ordered Feb 10, 2026",
+    statusLabel: "Shipped",
+    imageTone: "#f4d35e",
+    image_url: CARE_PRODUCT_IMAGES.yellowSkirt,
     status: "shipped",
     eta: "Jun 22, 2026",
-    trackingStage: 1,
+    trackingStage: 2,
   },
   {
     id: "ord-1031",
     orderRef: "#1031",
-    title: "Brown midi dress",
-    size: "M",
-    color: "Espresso",
-    price: 78,
-    imageTone: "#a16207",
+    title: "Jacket",
+    size: "S",
+    color: "Camel",
+    price: 74,
+    orderDate: "Ordered Feb 10, 2026",
+    statusLabel: "Delivered",
+    imageTone: "#bf8a4a",
+    image_url: CARE_PRODUCT_IMAGES.jacket,
     status: "delivered",
     eta: "Delivered Jun 10",
-    trackingStage: 3,
+    trackingStage: 1,
   },
   {
     id: "ord-1027",
     orderRef: "#1027",
-    title: "Orange slip dress",
-    size: "L",
+    title: "Orange dress",
+    size: "M",
     color: "Tangerine",
     price: 65,
+    orderDate: "Ordered Feb 10, 2026",
+    statusLabel: "Delivered",
     imageTone: "#fb923c",
+    image_url: CARE_PRODUCT_IMAGES.orangeDress,
     status: "placed",
     eta: "Processing",
     trackingStage: 0,
   },
 ];
 
-const CARE_TRACKING_STEPS = ["Order placed", "Shipped", "In transit", "Delivered"];
+const CARE_TRACKING_STEPS = ["Order placed", "Packed", "Shipped", "Delivered"];
 
 const CARE_FAQ_CATEGORIES = [
   {
@@ -3904,7 +4205,7 @@ function appendCarePanel(className = "care-panel") {
   return panel;
 }
 
-function renderCareMenuGrid(panel, actions, onSelect) {
+function renderCareMenuGrid(panel, actions, onSelect, activeFlow = "") {
   const grid = document.createElement("div");
   grid.className = "care-menu-grid";
 
@@ -3912,6 +4213,9 @@ function renderCareMenuGrid(panel, actions, onSelect) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "care-menu-button";
+    if (activeFlow && action.flow === activeFlow) {
+      button.classList.add("active");
+    }
     if (action.icon && ACTION_ICONS[action.icon]) {
       const icon = document.createElement("span");
       icon.className = "care-menu-icon";
@@ -3925,6 +4229,7 @@ function renderCareMenuGrid(panel, actions, onSelect) {
     button.addEventListener("click", () => {
       grid.querySelectorAll("button").forEach((item) => {
         item.disabled = true;
+        item.classList.toggle("active", item === button);
       });
       onSelect(action);
     });
@@ -3967,7 +4272,13 @@ function renderCareProductCard(order, actions = []) {
 
   const media = document.createElement("div");
   media.className = "care-product-media";
-  media.style.background = `linear-gradient(135deg, ${order.imageTone}, #ffffff)`;
+  if (order.image_url) {
+    const image = document.createElement("img");
+    image.src = order.image_url;
+    image.alt = order.title;
+    image.loading = "lazy";
+    media.appendChild(image);
+  }
 
   const info = document.createElement("div");
   info.className = "care-product-info";
@@ -3998,32 +4309,85 @@ function renderCareProductCard(order, actions = []) {
   return card;
 }
 
+function renderCareProductTile(order, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "care-product-tile";
+  const media = document.createElement("span");
+  media.className = "care-product-tile-media";
+  if (order.image_url) {
+    const image = document.createElement("img");
+    image.src = order.image_url;
+    image.alt = order.title;
+    image.loading = "lazy";
+    media.appendChild(image);
+  } else {
+    media.style.background = order.imageTone || "#fbfbfb";
+  }
+  const title = document.createElement("span");
+  title.className = "care-product-tile-title";
+  title.textContent = order.title;
+  const meta = document.createElement("span");
+  meta.className = "care-product-tile-meta";
+  meta.textContent = order.orderDate || [order.color, order.size ? `Size ${order.size}` : ""].filter(Boolean).join(" · ");
+  const status = document.createElement("span");
+  status.className = "care-product-tile-status";
+  status.textContent = order.statusLabel || order.status || "";
+  button.append(media, title, meta, status);
+  button.addEventListener("click", () => onClick(order));
+  return button;
+}
+
+function renderCareProductTileGrid(orders, onClick) {
+  const panel = appendCarePanel("care-panel care-product-picker");
+  const grid = document.createElement("div");
+  grid.className = "care-product-tile-grid";
+  orders.forEach((order) => {
+    grid.appendChild(renderCareProductTile(order, onClick));
+  });
+  panel.appendChild(grid);
+  return panel;
+}
+
 function renderCareTrackingCard(order) {
   const panel = appendCarePanel("care-panel care-tracking-card");
-  const heading = document.createElement("p");
-  heading.className = "care-panel-heading";
-  heading.textContent = "Below is your order status";
-  panel.appendChild(heading);
 
-  const status = document.createElement("p");
-  status.className = "care-status-line";
-  status.textContent =
-    order.trackingStage >= 3
-      ? "Order delivered"
-      : order.trackingStage >= 2
-        ? "Order is on its way"
-        : order.trackingStage >= 1
-          ? "Order has shipped"
-          : "Order is being prepared";
-  panel.appendChild(status);
+  const hero = document.createElement("div");
+  hero.className = "care-tracking-hero";
 
-  if (order.eta) {
-    const eta = document.createElement("p");
-    eta.className = "care-status-meta";
-    eta.textContent =
-      order.trackingStage >= 3 ? order.eta : `Estimated delivery: ${order.eta}`;
-    panel.appendChild(eta);
+  const media = document.createElement("div");
+  media.className = "care-tracking-hero-media";
+  if (order.image_url) {
+    const image = document.createElement("img");
+    image.src = order.image_url;
+    image.alt = order.title;
+    image.loading = "lazy";
+    media.appendChild(image);
   }
+
+  const details = document.createElement("div");
+  details.className = "care-tracking-hero-details";
+
+  const title = document.createElement("p");
+  title.className = "care-product-title";
+  title.textContent = order.title;
+
+  const size = document.createElement("span");
+  size.textContent = order.size ? `Size: ${order.size}` : "";
+
+  const color = document.createElement("span");
+  color.textContent = order.color ? `Color: ${order.color}` : "";
+
+  const orderNo = document.createElement("span");
+  orderNo.textContent = `Order No: ${order.orderNumber || order.orderRef || "BR20482"}`;
+
+  const statusPill = document.createElement("span");
+  statusPill.className = "care-tracking-status-pill";
+  statusPill.textContent = order.statusLabel || "Shipped";
+
+  details.append(title, size, color, orderNo, statusPill);
+  hero.append(media, details);
+  panel.appendChild(hero);
 
   const stepper = document.createElement("div");
   stepper.className = "care-stepper";
@@ -4048,10 +4412,6 @@ function renderCareTrackingCard(order) {
     stepper.appendChild(step);
   });
   panel.appendChild(stepper);
-
-  const summary = renderCareProductCard(order, []);
-  summary.classList.add("care-product-summary");
-  panel.appendChild(summary);
   return panel;
 }
 
@@ -4071,6 +4431,96 @@ function renderCareSummaryCard(order, details) {
     panel.appendChild(row);
   });
 
+  return panel;
+}
+
+function renderCareRefundSummaryCard(order, details) {
+  const panel = appendCarePanel("care-panel care-summary-card care-refund-summary-card");
+  const top = document.createElement("div");
+  top.className = "care-refund-product-row";
+  const media = document.createElement("div");
+  media.className = "care-product-media";
+  if (order.image_url) {
+    const image = document.createElement("img");
+    image.src = order.image_url;
+    image.alt = order.title;
+    image.loading = "lazy";
+    media.appendChild(image);
+  }
+  const info = document.createElement("div");
+  info.className = "care-product-info";
+  const title = document.createElement("p");
+  title.className = "care-product-title";
+  title.textContent = order.title;
+  const meta = document.createElement("p");
+  meta.className = "care-product-meta";
+  meta.textContent = `Size: ${order.size || "M"}\nColor: ${order.color}\nOrder No: ${order.orderRef || "BR20482"}`;
+  info.append(title, meta);
+  top.append(media, info);
+  panel.appendChild(top);
+
+  details.forEach(([labelText, valueText]) => {
+    const row = document.createElement("div");
+    row.className = "care-summary-row";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    const value = document.createElement("strong");
+    value.textContent = valueText;
+    row.append(label, value);
+    panel.appendChild(row);
+  });
+  return panel;
+}
+
+function renderCareExchangeSizeCard(order, onSelect) {
+  const panel = appendCarePanel("care-panel care-summary-card care-exchange-size-card");
+  const top = document.createElement("div");
+  top.className = "care-refund-product-row";
+  const media = document.createElement("div");
+  media.className = "care-product-media";
+  if (order.image_url) {
+    const image = document.createElement("img");
+    image.src = order.image_url;
+    image.alt = order.title;
+    image.loading = "lazy";
+    media.appendChild(image);
+  }
+  const info = document.createElement("div");
+  info.className = "care-product-info";
+  const title = document.createElement("p");
+  title.className = "care-product-title";
+  title.textContent = order.title;
+  const meta = document.createElement("p");
+  meta.className = "care-product-meta";
+  meta.textContent = `Current Size: ${order.size || "M"}`;
+  info.append(title, meta);
+  top.append(media, info);
+  panel.appendChild(top);
+
+  const label = document.createElement("p");
+  label.className = "care-size-label";
+  label.textContent = "Select new size";
+  panel.appendChild(label);
+
+  const row = document.createElement("div");
+  row.className = "care-size-row";
+  CARE_EXCHANGE_SIZES.forEach((size) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "care-size-button";
+    button.textContent = size;
+    if (size === order.size) {
+      button.classList.add("disabled");
+      button.disabled = true;
+    }
+    button.addEventListener("click", () => {
+      row.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      onSelect(size);
+    });
+    row.appendChild(button);
+  });
+  panel.appendChild(row);
   return panel;
 }
 
@@ -4118,38 +4568,19 @@ function showCustomerCareMenu(options = {}) {
 }
 
 function showTrackOrderScreen(options = {}) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("track");
 
   if (!options.silent) {
     addMessage("Which order would you like to track?", "bot");
   }
 
-  const panel = appendCarePanel("care-panel care-product-list");
-  const list = document.createElement("div");
-  list.className = "care-product-stack";
-
-  CARE_DEMO_ORDERS.forEach((order) => {
-    const card = renderCareProductCard(order, [
-      {
-        label: "Track",
-        primary: true,
-        onClick: (selected) => {
-          addMessage(selected.title, "user");
-          showTrackOrderDetail(selected);
-        },
-      },
-    ]);
-    list.appendChild(card);
+  renderCareProductTileGrid(CARE_DEMO_ORDERS, (selected) => {
+    addMessage(selected.title, "user");
+    showTrackOrderDetail(selected);
   });
-
-  panel.appendChild(list);
 }
 
 function showTrackOrderDetail(order) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("track_detail", { order });
 
   renderCareTrackingCard(order);
@@ -4161,8 +4592,6 @@ function showTrackOrderDetail(order) {
 }
 
 function showFaqCategoryScreen(options = {}) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("faq_categories");
 
   if (!options.silent) {
@@ -4181,8 +4610,6 @@ function showFaqCategoryScreen(options = {}) {
 }
 
 function showFaqQuestionsScreen(category) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("faq_questions", { categoryId: category.id });
 
   addMessage(`Here are some common ${category.label.toLowerCase()} questions:`, "bot");
@@ -4215,8 +4642,6 @@ async function loadFaqLibrary() {
 }
 
 function showAgentTopicScreen(options = {}) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("agent_topics");
 
   if (!options.silent) {
@@ -4231,11 +4656,14 @@ function showAgentTopicScreen(options = {}) {
 }
 
 function showAgentConnectingScreen(topic) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("agent_connecting", { topic });
 
-  addMessage("Connecting you to an agent. Estimated wait time: 2 mins.", "bot");
+  addMessage("Connecting you to an agent...", "bot");
+  const joined = document.createElement("p");
+  joined.className = "care-agent-joined";
+  joined.textContent = "Sara has joined the chat";
+  chatLog.appendChild(joined);
+  addMessage("Hi, how may I help you?", "bot");
 
   const panel = appendCarePanel("care-panel care-connecting-panel");
   const button = document.createElement("button");
@@ -4256,45 +4684,19 @@ function showAgentConnectingScreen(topic) {
 }
 
 function showReturnItemScreen(options = {}) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_items");
 
   if (!options.silent) {
-    addMessage("Which item would you like to return/exchange?", "bot");
+    addMessage("What would you like to return?", "bot");
   }
 
-  const panel = appendCarePanel("care-panel care-product-list");
-  const list = document.createElement("div");
-  list.className = "care-product-stack";
-
-  CARE_DEMO_ORDERS.slice(0, 3).forEach((order) => {
-    const card = renderCareProductCard(order, [
-      {
-        label: "Return",
-        onClick: (selected) => {
-          addMessage(`Return ${selected.title}`, "user");
-          startReturnFlow(selected, "return");
-        },
-      },
-      {
-        label: "Exchange",
-        primary: true,
-        onClick: (selected) => {
-          addMessage(`Exchange ${selected.title}`, "user");
-          startReturnFlow(selected, "exchange");
-        },
-      },
-    ]);
-    list.appendChild(card);
+  renderCareProductTileGrid(CARE_DEMO_ORDERS, (selected) => {
+    addMessage(`Return or exchanges ${selected.title}`, "user");
+    startReturnFlow(selected, "return");
   });
-
-  panel.appendChild(list);
 }
 
 function startReturnFlow(order, intent) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_reason", { order, intent });
 
   addMessage(
@@ -4310,17 +4712,15 @@ function startReturnFlow(order, intent) {
 }
 
 function showReturnActionScreen(order, intent, reason) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_action", { order, intent, reason });
 
-  addMessage("Would you like to exchange for a different size or get a refund?", "bot");
+  addMessage("Would you like to exchange for a larger size or get a refund?", "bot");
 
   const panel = appendCarePanel("care-panel care-action-choice");
   const row = document.createElement("div");
   row.className = "care-action-choice-row";
 
-  ["Exchange", "Refund"].forEach((label) => {
+  ["Exchange", "Return"].forEach((label) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "care-action-btn" + (label === "Exchange" ? " primary" : "");
@@ -4340,23 +4740,41 @@ function showReturnActionScreen(order, intent, reason) {
 }
 
 function showExchangeSizeScreen(order, reason) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_size", { order, reason });
 
   addMessage("Which size would you like instead?", "bot");
-
-  const panel = appendCarePanel("care-panel");
-  renderCareChipRow(panel, CARE_EXCHANGE_SIZES, (size) => {
+  renderCareExchangeSizeCard(order, (size) => {
     addMessage(`Size ${size}`, "user");
     showReturnConfirmScreen({ ...order, exchangeSize: size }, "exchange", reason);
   });
 }
 
 function showReturnConfirmScreen(order, resolution, reason) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_confirm", { order, resolution, reason });
+
+  if (resolution === "exchange") {
+    renderCareRefundSummaryCard(order, [
+      ["Item", order.title],
+      ["New size", order.exchangeSize || "L"],
+      ["Dispatched in", "2-3 days after drop"],
+    ]);
+  } else {
+    addMessage("We're sorry about that. Here's your refund summary:", "bot");
+    renderCareRefundSummaryCard(order, [
+      ["Refund amount", "Rs 2,499"],
+      ["Returns to", "Original card"],
+      ["Timeline", "3-5 business days"],
+    ]);
+  }
+
+  renderCareConfirmButton(
+    resolution === "exchange" ? "Confirm exchange" : "Confirm return",
+    () => {
+      addMessage(resolution === "exchange" ? "Confirm exchange" : "Confirm return", "user");
+      completeReturnFlow(order, resolution);
+    }
+  );
+  return;
 
   const amount = `$${Number(order.price || 0).toFixed(2)}`;
   renderCareSummaryCard(order, [
@@ -4376,19 +4794,17 @@ function showReturnConfirmScreen(order, resolution, reason) {
 }
 
 function completeReturnFlow(order, resolution) {
-  clearActivePromptPanels();
-  clearCarePanels();
   setSupportFlowScreen("return_done", { order, resolution });
 
-  const referenceId = resolution === "exchange" ? "987654321" : "123456789";
-  const title = resolution === "exchange" ? "Your exchange has been initiated" : "Your refund has been processed";
+  const title = resolution === "exchange" ? "Your exchange has been initiated" : "Your refund has been initiated";
   const confirmation =
     resolution === "exchange" ? "Exchange confirmed" : "Refund confirmed";
 
   addMessage(title, "bot");
   renderCareDoneCard(confirmation, [
-    `Reference: ${referenceId}`,
-    "Return by: Jun 24, 2026",
+    resolution === "exchange" ? `Item: ${order.title}` : "Refund amount: Rs 2,499",
+    resolution === "exchange" ? `New size: ${order.exchangeSize || order.size}` : "Returns to: Original card",
+    resolution === "exchange" ? "Dispatched in: 2-3 days after drop" : "Timeline: 3-5 business days",
   ]);
 
   const prompt =
@@ -4459,19 +4875,29 @@ function getOutfitOnboardingSequence() {
     {
       key: "occasion",
       prompt: "Great! What's the occasion for today?",
-      options: profileOptions.occasion,
+      options: ["Work/office", "Date night", "Casual", "Party/event", "Other"],
       variant: "chips",
     },
     {
-      key: "feel",
-      prompt: "Nice! What style are you going for?",
-      options: profileOptions.feel,
-      variant: "chips",
+      key: "vibe_method",
+      prompt: "What vibe are you going for?",
+      options: [
+        { label: "Paste pinterest board", value: "pinterest" },
+        { label: "Upload screenshots", value: "upload" },
+        { label: "Choose from presets", value: "presets" },
+      ],
+      variant: "stacked",
     },
     {
       key: "location",
-      prompt: "And, where will you be wearing this outfit?",
-      options: profileOptions.location,
+      prompt: "Nice! Where will you be wearing this outfit?",
+      options: ["Paris", "London", "New York", "Other"],
+      variant: "chips",
+    },
+    {
+      key: "weather",
+      prompt: "What kind of weather do you expect there?",
+      options: ["Hot", "Warm", "Mild", "Cold", "Rainy"],
       variant: "chips",
     },
   ];
@@ -4639,7 +5065,7 @@ function getCompleteLookStartActions() {
     { label: "Take photo", action: "camera", icon: "camera" },
     { label: "Upload photo", action: "upload", icon: "upload" },
     { label: "Paste link", action: "shop_link", icon: "link" },
-    { label: "From purchases", action: "past_purchases", icon: "shop" },
+    { label: "Past Purchases", action: "past_purchases", icon: "shop" },
   ];
 }
 
@@ -4657,6 +5083,343 @@ function showCompleteLookStartScreen() {
     (option) => handleImageActionSelection(option),
     "complete-start-grid"
   );
+}
+
+function getCompleteDemoAnchor() {
+  return {
+    id: "complete-anchor-orange-top",
+    title: "Orange halter top",
+    category: "Top",
+    price: 28,
+    image_url: DEMO_OUTFIT_IMAGES.orangeTop,
+    support_slot: "Anchor",
+    available_for_sale: true,
+    cart_variant_id: "demo-complete-anchor-orange-top",
+  };
+}
+
+function getCompleteDemoPastPurchases() {
+  return [
+    {
+      id: "past-checked-jacket",
+      title: "Checked jacket",
+      meta: ["Purchased: 26th April, 2025", "Size: S", "Color: Brown"],
+      image_url: DEMO_OUTFIT_IMAGES.checkedJacket,
+    },
+    {
+      id: "past-beaded-dress",
+      title: "Beaded Dress",
+      meta: ["Purchased: 20th April, 2025", "Size: S", "Color: Multicolor"],
+      image_url: DEMO_OUTFIT_IMAGES.beadedDress,
+    },
+    {
+      id: "past-floral-skirt",
+      title: "Floral Midi Skirt",
+      meta: ["Purchased: 10th April, 2025", "Size: S", "Color: Pink"],
+      image_url: DEMO_OUTFIT_IMAGES.floralSkirt,
+    },
+  ];
+}
+
+function getCompleteDemoResultGroups() {
+  return [
+    {
+      title: "Pants",
+      products: [
+        { title: "Blue jeans", price: 35, image_url: DEMO_OUTFIT_IMAGES.blueJeans },
+        { title: "Grey Trousers", price: 35, image_url: DEMO_OUTFIT_IMAGES.greyTrouser },
+        { title: "Wide leg pants", price: 35, image_url: DEMO_OUTFIT_IMAGES.wideLegPants },
+      ],
+    },
+    {
+      title: "Jackets",
+      products: [
+        { title: "Pink Pullover", price: 35, image_url: DEMO_OUTFIT_IMAGES.pinkPullover },
+        { title: "Blue knit jacket", price: 35, image_url: DEMO_OUTFIT_IMAGES.blueKnit },
+        { title: "Striped jacket", price: 35, image_url: DEMO_OUTFIT_IMAGES.stripedJacket },
+      ],
+    },
+    {
+      title: "Full outfits",
+      products: [
+        { title: "Soft Girl", price: 70, image_url: DEMO_OUTFIT_IMAGES.softGirlOutfit },
+        { title: "Casual Cool", price: 65, image_url: DEMO_OUTFIT_IMAGES.brownBoot },
+        { title: "Summer Chic", price: 60, image_url: DEMO_OUTFIT_IMAGES.summerChicOutfit },
+      ],
+    },
+  ];
+}
+
+function renderCompleteDemoAnchorMessage(anchor = getCompleteDemoAnchor()) {
+  const panel = document.createElement("section");
+  panel.className = "complete-anchor-panel figma-card-screen";
+  const media = document.createElement("div");
+  media.className = "complete-anchor-media";
+  media.appendChild(buildImageTile(anchor));
+  panel.appendChild(media);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderCompleteUploadPanel() {
+  addMessage("Drop your photo below", "bot");
+  const panel = document.createElement("section");
+  panel.className = "complete-upload-panel figma-card-screen";
+  const upload = document.createElement("button");
+  upload.type = "button";
+  upload.className = "complete-upload-zone";
+  upload.innerHTML = `${ACTION_ICONS.upload}<span>Tap to upload image</span>`;
+  upload.addEventListener("click", () => {
+    addMessage("Image uploaded", "user");
+    renderCompleteDemoAnchorMessage();
+    renderCompleteDemoFindFlow();
+  });
+  panel.appendChild(upload);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderCompleteLinkPanel() {
+  addMessage("Please paste your product link", "bot");
+  const panel = document.createElement("section");
+  panel.className = "complete-link-panel figma-card-screen";
+  const form = document.createElement("form");
+  form.className = "complete-link-form";
+  const input = document.createElement("input");
+  input.type = "url";
+  input.placeholder = "Link";
+  input.value = "";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = "↑";
+  form.append(input, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const url = input.value.trim() || "https://shoplane.com/p/halter-top-2847";
+    addMessage(url, "user");
+    renderCompleteDemoAnchorMessage();
+    renderCompleteDemoFindFlow();
+  });
+  panel.appendChild(form);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderCompletePastPurchasesPanel() {
+  addMessage("Pick an item and I'll complete the look!", "bot");
+  const panel = document.createElement("section");
+  panel.className = "complete-purchases-panel figma-card-screen";
+  getCompleteDemoPastPurchases().forEach((item) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "complete-purchase-row";
+    const image = document.createElement("img");
+    image.src = item.image_url;
+    image.alt = item.title;
+    image.loading = "lazy";
+    const copy = document.createElement("div");
+    copy.className = "complete-purchase-copy";
+    const name = document.createElement("strong");
+    name.textContent = item.title;
+    copy.appendChild(name);
+    item.meta.forEach((line) => {
+      const meta = document.createElement("span");
+      meta.textContent = line;
+      copy.appendChild(meta);
+    });
+    const plus = document.createElement("span");
+    plus.className = "complete-purchase-plus";
+    plus.textContent = "+";
+    row.append(image, copy, plus);
+    row.addEventListener("click", () => {
+      addMessage(item.title, "user");
+      renderCompleteDemoFindFlow(item);
+    });
+    panel.appendChild(row);
+  });
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderCompleteDemoFindFlow(anchor = getCompleteDemoAnchor()) {
+  addMessage("Cute top! What would you like me to find for you?", "bot");
+  addSuggestionChips(
+    ["Pants", "Shoes", "Jackets", "Jewellery", "Full outfit"].map((label) => ({ label, value: label })),
+    (option) => {
+      addMessage(option.label === "Pants" ? "Pants, Jackets" : option.label, "user");
+      if (option.label === "Full outfit") {
+        renderCreateFullOutfitResult(buildProfileInputsPayload(), { hideNewOutfits: true });
+        return;
+      }
+      addMessage("Here's what I found!", "bot");
+      renderCompleteDemoResults();
+    },
+    "complete-find-chips"
+  );
+}
+
+function renderCompleteDemoResults() {
+  const existing = chatLog.querySelector(".complete-results-panel");
+  if (existing) {
+    existing.remove();
+  }
+  const panel = document.createElement("section");
+  panel.className = "complete-results-panel figma-card-screen";
+  getCompleteDemoResultGroups().forEach((group) => {
+    const heading = document.createElement("p");
+    heading.className = "complete-results-heading";
+    heading.textContent = group.title;
+    const grid = document.createElement("div");
+    grid.className = "complete-results-grid";
+    group.products.forEach((product) => {
+      const card = document.createElement("article");
+      card.className = "complete-result-card";
+      const media = document.createElement("div");
+      media.className = "complete-result-media";
+      media.appendChild(buildImageTile(product));
+      const name = document.createElement("strong");
+      name.textContent = product.title;
+      const price = document.createElement("span");
+      price.textContent = `€${product.price}`;
+      const tag = document.createElement("em");
+      tag.textContent = group.title === "Pants" && product.title !== "Grey Trousers" ? "Top match" : "Trending";
+      card.append(media, name, price, tag);
+      grid.appendChild(card);
+    });
+    panel.append(heading, grid);
+  });
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function startGetInspiredDemoFlow() {
+  startInspireConversation();
+}
+
+function renderGetInspiredSourceChoice() {
+  addSuggestionChips(
+    [
+      {
+        label: "I Have Inspiration",
+        description: "You've got a Pinterest board, photos, or a specific vibe in mind. I'll help you recreate it!",
+        action: "own",
+      },
+      {
+        label: "Inspire me",
+        description: "No idea what you want? I'll curate looks based on your style, trending items, and hidden gems.",
+        action: "browse",
+      },
+    ],
+    (option) => {
+      addMessage(option.label, "user");
+      clearActivePromptPanels();
+      if (option.action === "own") {
+        addMessage("Please choose your option", "bot");
+        renderGetInspiredUploadPanel();
+        return;
+      }
+      renderGetInspiredIdeaGrid();
+    },
+    "inspire-choice"
+  );
+}
+
+function renderGetInspiredUploadPanel() {
+  const panel = document.createElement("section");
+  panel.className = "inspire-upload-panel figma-card-screen";
+
+  const pinterestLabel = document.createElement("p");
+  pinterestLabel.className = "inspire-upload-label";
+  pinterestLabel.textContent = "Pinterest";
+  const pinterestHint = document.createElement("p");
+  pinterestHint.className = "inspire-upload-hint";
+  pinterestHint.textContent = "Share your Pinterest board to analyze";
+  const input = document.createElement("input");
+  input.className = "inspire-upload-input";
+  input.type = "text";
+  input.placeholder = "Name";
+
+  const uploadLabel = document.createElement("p");
+  uploadLabel.className = "inspire-upload-label";
+  uploadLabel.textContent = "Upload your style";
+  const uploadHint = document.createElement("p");
+  uploadHint.className = "inspire-upload-hint";
+  uploadHint.textContent = "Upload photos of the outfit you love!";
+
+  const zone = document.createElement("button");
+  zone.type = "button";
+  zone.className = "inspire-upload-dropzone";
+  zone.innerHTML = `${ACTION_ICONS.upload}<span>Tap to upload images<br>(10 max)</span>`;
+  zone.addEventListener("click", () => {
+    addMessage("Upload screenshots", "user");
+  });
+
+  const analyze = document.createElement("button");
+  analyze.type = "button";
+  analyze.className = "inspire-analyze-button";
+  analyze.textContent = "Analyze";
+  analyze.addEventListener("click", () => {
+    addMessage("Analyze", "user");
+    renderGetInspiredLoadingThenIdeas();
+  });
+
+  panel.append(pinterestLabel, pinterestHint, input, uploadLabel, uploadHint, zone, analyze);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderGetInspiredLoadingThenIdeas() {
+  clearActivePromptPanels();
+  const typingState = showTypingState("inspire");
+  window.setTimeout(() => {
+    removeTypingState(typingState);
+    renderGetInspiredIdeaGrid();
+  }, 650);
+}
+
+function renderGetInspiredLoadingThenOutfit() {
+  clearActivePromptPanels();
+  const typingState = showTypingState("inspire");
+  window.setTimeout(() => {
+    removeTypingState(typingState);
+    renderGetInspiredOutfitResult();
+  }, 650);
+}
+
+function renderGetInspiredIdeaGrid() {
+  clearActivePromptPanels();
+  addMessage("Here are some ideas! Feel free to select what you like!", "bot");
+  const panel = document.createElement("section");
+  panel.className = "inspire-demo-grid-panel figma-card-screen";
+  [
+    ["Trending Now", "12 looks"],
+    ["For my Style", "18 looks"],
+    ["Seasonal picks", "20 looks"],
+    ["Hidden gems", "8 looks"],
+    ["New Arrivals", "10 looks"],
+    ["Under €50", "9 looks"],
+  ].forEach(([title, count]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "inspire-demo-grid-card";
+    button.innerHTML = `<strong>${title}</strong><span>${count}</span>`;
+    button.addEventListener("click", () => {
+      addMessage(title, "user");
+      renderGetInspiredLoadingThenOutfit();
+    });
+    panel.appendChild(button);
+  });
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function renderGetInspiredOutfitResult() {
+  renderCreateFullOutfitResult(buildProfileInputsPayload(), {
+    mode: backendModes.inspire,
+    uiMode: "inspire",
+    headerMode: "inspire",
+    contextNote: "Get inspired demo",
+  });
 }
 
 function resetInspireFlowContext() {
@@ -4683,13 +5446,13 @@ function showInspireSourceChoice() {
   addSuggestionChips(
     [
       {
-        label: "I have inspiration",
-        description: "Upload a photo from your gallery or take a new one to help us understand.",
+        label: "I Have Inspiration",
+        description: "You've got a Pinterest board, photos, or a specific vibe in mind. I'll help us recreate it.",
         action: "inspire_own",
       },
       {
         label: "Inspire me",
-        description: "Not sure what to wear today? Browse our latest trends and collections.",
+        description: "No idea what you want? I'll curate looks based on your style, trending items, and hidden gems.",
         action: "inspire_browse",
       },
     ],
@@ -4703,6 +5466,10 @@ function showInspireSourceChoice() {
         return;
       }
       inspireFlowContext = { ...(inspireFlowContext || {}), path: "browse", styleCategory: null, pinterestUrl: "" };
+      if (isDemoMode()) {
+        renderGetInspiredIdeaGrid();
+        return;
+      }
       void showInspireStyleGrid();
     },
     "inspire-choice"
@@ -4722,6 +5489,10 @@ function showInspireUploadPanel() {
   pinterestLabel.textContent = "Pinterest";
   pinterestLabel.setAttribute("for", "inspirePinterestInput");
 
+  const pinterestHint = document.createElement("p");
+  pinterestHint.className = "inspire-upload-hint";
+  pinterestHint.textContent = "Share your Pinterest board to analyze";
+
   const pinterestInput = document.createElement("input");
   pinterestInput.id = "inspirePinterestInput";
   pinterestInput.className = "inspire-upload-input";
@@ -4735,7 +5506,7 @@ function showInspireUploadPanel() {
     imageUrlInput.value = pinterestInput.value.trim();
   });
 
-  pinterestGroup.append(pinterestLabel, pinterestInput);
+  pinterestGroup.append(pinterestLabel, pinterestHint, pinterestInput);
 
   const uploadGroup = document.createElement("div");
   uploadGroup.className = "inspire-upload-group";
@@ -4743,6 +5514,10 @@ function showInspireUploadPanel() {
   const uploadLabel = document.createElement("p");
   uploadLabel.className = "inspire-upload-label";
   uploadLabel.textContent = "Upload your style";
+
+  const uploadHint = document.createElement("p");
+  uploadHint.className = "inspire-upload-hint";
+  uploadHint.textContent = "Upload photos of the outfit you love!";
 
   const dropzone = document.createElement("button");
   dropzone.type = "button";
@@ -4755,7 +5530,7 @@ function showInspireUploadPanel() {
 
   const dropzoneText = document.createElement("span");
   dropzoneText.className = "inspire-upload-dropzone-text";
-  dropzoneText.textContent = "Tap to upload or take a photo";
+  dropzoneText.innerHTML = "Tap to upload images<br>(10 max)";
 
   const preview = document.createElement("img");
   preview.className = "inspire-upload-preview hidden";
@@ -4766,7 +5541,7 @@ function showInspireUploadPanel() {
     launchImagePicker("upload");
   });
 
-  uploadGroup.append(uploadLabel, dropzone);
+  uploadGroup.append(uploadLabel, uploadHint, dropzone);
 
   const analyzeButton = document.createElement("button");
   analyzeButton.type = "button";
@@ -4895,6 +5670,11 @@ async function handleInspireAnalyze() {
   const selectedFile = getSelectedImageFile();
 
   if (!pinterestUrl && !selectedFile) {
+    if (isDemoMode()) {
+      clearActivePromptPanels();
+      renderGetInspiredLoadingThenIdeas();
+      return;
+    }
     addMessage("Add a Pinterest link or upload a style image first.", "bot");
     return;
   }
@@ -5139,8 +5919,12 @@ function addInspiredSuggestionsPanel(products, profile, insights = [], context =
   const cartButton = document.createElement("button");
   cartButton.type = "button";
   cartButton.className = "inspire-cta inspire-cta--primary";
-  cartButton.textContent = "Add to cart";
+  cartButton.textContent = shouldUseViewProductInstead(products) ? "View Product" : "Add to cart";
   cartButton.addEventListener("click", () => {
+    if (shouldUseViewProductInstead(products)) {
+      showProductViewForLocalDemo(products, context);
+      return;
+    }
     void addProductsToCartBulk(products, cartButton);
   });
 
@@ -5237,8 +6021,12 @@ function addInspiredItemListPanel(products, context, options = {}) {
   const addAllButton = document.createElement("button");
   addAllButton.type = "button";
   addAllButton.className = "inspire-cta inspire-cta--primary inspire-cta--wide";
-  addAllButton.textContent = "Add all to cart";
+  addAllButton.textContent = shouldUseViewProductInstead(products) ? "View Product" : "Add all to cart";
   addAllButton.addEventListener("click", () => {
+    if (shouldUseViewProductInstead(products)) {
+      showProductViewForLocalDemo(products, context);
+      return;
+    }
     void addProductsToCartBulk(products, addAllButton);
   });
 
@@ -5252,8 +6040,13 @@ function addInspiredItemListPanel(products, context, options = {}) {
     }
   });
 
-  actions.append(addAllButton, swapButton);
-  panel.append(heading, list, actions);
+  if (!options.viewOnly) {
+    actions.append(addAllButton, swapButton);
+  }
+  panel.append(heading, list);
+  if (!options.viewOnly) {
+    panel.appendChild(actions);
+  }
   chatLog.appendChild(panel);
   scrollChatToBottom();
 }
@@ -5279,6 +6072,10 @@ function handleImageActionSelection(option) {
 
   if (option.action === "upload") {
     addMessage(option.label, "user");
+    if (activeMode === "complete") {
+      renderCompleteUploadPanel();
+      return;
+    }
     if (homeViewActive || !isImageMode(activeMode)) {
       if (homeViewActive) {
         homeViewActive = false;
@@ -5292,12 +6089,7 @@ function handleImageActionSelection(option) {
   if (option.action === "shop_link") {
     addMessage(option.label, "user");
     if (activeMode === "complete") {
-      addMessage("Paste your link here.", "bot");
-      addInlineLinkInput("Paste link here…", (url) => {
-        addMessage(url, "user");
-        imageUrlInput.value = url;
-        void sendImageChat("", null, url, { skipUserEcho: true });
-      });
+      renderCompleteLinkPanel();
     } else {
       addMessage("Paste your Pinterest board link below.", "bot");
       addInlineLinkInput("Paste board URL here…", (url) => {
@@ -5327,6 +6119,10 @@ function handleImageActionSelection(option) {
 
   if (option.action === "past_purchases") {
     addMessage(option.label, "user");
+    if (activeMode === "complete") {
+      renderCompletePastPurchasesPanel();
+      return;
+    }
     addMessage("I can pull up a recent order. Share your order number or checkout email.", "bot");
     homeViewActive = false;
     setMode("support");
@@ -5355,6 +6151,8 @@ function askGuidedQuestion() {
   clearActivePromptPanels();
   addMessage(question.prompt, "bot");
   renderGuidedQuestionOptions(question);
+  requestAnimationFrame(scrollChatToBottom);
+  window.setTimeout(scrollChatToBottom, 140);
 }
 
 function renderGuidedQuestionOptions(question) {
@@ -5465,6 +6263,279 @@ function renderTextOutfitFollowUpActions(requiredFields = []) {
   );
 }
 
+function buildDemoOutfitContext(profileInputs = null, options = {}) {
+  const products = getDemoProducts("outfit");
+  const profile = {
+    ...(profileInputs || {}),
+    feeling_goal: shopperProfileDraft.feel || "Edgy and bold",
+    occasion_context: shopperProfileDraft.location || "Paris",
+    segment_preference: "womenswear",
+    look_title: "Casual Brunch",
+    summary: "Casual, city-ready, and easy to wear.",
+  };
+  const insights = [
+    { detail: "Neutral tones suit your warm skin" },
+    { detail: "Oversized fit suits your style" },
+    { detail: "High waist flatters your shape" },
+    { detail: "Fits your EUR50-100 budget" },
+  ];
+  const context = {
+    mode: options.mode || backendModes.outfit,
+    uiMode: options.uiMode || "outfit",
+    contextNote: options.contextNote || "Create full outfit demo",
+    recommendedProductIds: products.map((item) => item.id),
+    products,
+    shopperProfile: profile,
+    stylingInsights: insights,
+    outfitPriceLabel: "€72",
+    hideNewOutfits: Boolean(options.hideNewOutfits),
+  };
+  return { products, profile, insights, context };
+}
+
+function renderCreateFullOutfitResult(profileInputs = null, options = {}) {
+  const { products, profile, insights, context } = buildDemoOutfitContext(profileInputs, options);
+  latestRecommendationContext = context;
+  syncWidgetHeader(options.headerMode || context.uiMode || "outfit");
+  if (widgetPanel) {
+    widgetPanel.dataset.mode = options.headerMode || context.uiMode || "outfit";
+  }
+  addMessage("Here are some outfit suggestions for you!", "bot");
+  addLookPreview(products, context.uiMode || "outfit", profile, insights, context);
+}
+
+function setOutfitSwapHeaderActive(context = null) {
+  if (widgetWelcomeTitle) {
+    widgetWelcomeTitle.textContent =
+      context && context.uiMode === "inspire" ? "Get inspired" : "Complete my look";
+  }
+  if (widgetPanel) {
+    widgetPanel.dataset.mode = context && context.uiMode === "inspire" ? "inspire" : "complete";
+  }
+  syncHeaderNavButton();
+}
+
+function createOutfitSwapProductCard(product) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "outfit-swap-product-card";
+
+  const media = document.createElement("div");
+  media.className = "outfit-swap-product-media";
+  media.appendChild(buildImageTile(product));
+
+  const body = document.createElement("div");
+  body.className = "outfit-swap-product-body";
+
+  const title = document.createElement("p");
+  title.className = "outfit-swap-product-title";
+  title.textContent = product.title;
+
+  const meta = document.createElement("div");
+  meta.className = "outfit-swap-product-meta";
+  const price = document.createElement("span");
+  price.textContent = `€${product.price}`;
+  const swap = document.createElement("span");
+  swap.className = "outfit-swap-pill";
+  swap.textContent = "⇄ Swap";
+  meta.append(price, swap);
+
+  body.append(title, meta);
+  card.append(media, body);
+  return card;
+}
+
+function renderOutfitSwapSelectionScreen(context) {
+  setOutfitSwapHeaderActive(context);
+  clearActivePromptPanels();
+  addMessage("Which items would you like to swap?", "bot");
+
+  const panel = document.createElement("section");
+  panel.className = "outfit-swap-selection-panel figma-card-screen";
+  const grid = document.createElement("div");
+  grid.className = "outfit-swap-selection-grid";
+  (context.products || []).slice(0, 4).forEach((product) => {
+    const card = createOutfitSwapProductCard(product);
+    card.addEventListener("click", () => {
+      addMessage(product.title, "user");
+      renderOutfitSwapOptionsScreen(context, product);
+    });
+    grid.appendChild(card);
+  });
+  panel.appendChild(grid);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function getDemoSwapReplacementProduct(product, selectedProduct) {
+  const slot = selectedProduct.support_slot || product.support_slot;
+  return {
+    ...product,
+    id: `${product.id}-selected`,
+    support_slot: slot,
+    available_for_sale: true,
+    cart_variant_id: product.cart_variant_id || `demo-${product.id}-selected`,
+  };
+}
+
+function buildOutfitSwapOptionProducts(selectedProduct, selectedAlternative = null) {
+  const target = getSwapLabelForProduct(selectedProduct);
+  const category = target ? target.category : "trousers";
+  const swapPool = DEMO_SWAP_ALTERNATIVES[category] || DEMO_SWAP_ALTERNATIVES.trousers || [];
+  const alternatives = category === "trousers" ? swapPool.slice(1, 4) : swapPool.slice(0, 3);
+  const contextProducts = (latestRecommendationContext && latestRecommendationContext.products) || [];
+  const contextProductBySlot = (slot, fallbackIndex) =>
+    contextProducts.find((product) => product.support_slot === slot) || contextProducts[fallbackIndex] || null;
+  const trouserSwap =
+    selectedAlternative && ["trousers", "bottom", "pants"].includes(String(selectedAlternative.category || "").toLowerCase())
+      ? getDemoSwapReplacementProduct(selectedAlternative, {
+          support_slot: "Bottom",
+        })
+      : null;
+  const composition = [
+    contextProductBySlot("Top", 0) || {
+      id: "swap-look-sweater",
+      title: "Sweater",
+      category: "Top",
+      price: 18,
+      image_url: DEMO_OUTFIT_IMAGES.sweater,
+      support_slot: "Top",
+      available_for_sale: true,
+      cart_variant_id: "demo-swap-look-sweater",
+    },
+    trouserSwap || contextProductBySlot("Bottom", 1) || {
+      id: "swap-look-denim",
+      title: "Denim",
+      category: "Trousers",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.denim,
+      support_slot: "Bottom",
+      available_for_sale: true,
+      cart_variant_id: "demo-swap-look-denim",
+    },
+    {
+      id: "swap-look-watch",
+      title: "Gold watch",
+      category: "Accessories",
+      price: 19,
+      image_url: DEMO_OUTFIT_IMAGES.watch,
+      support_slot: "Accessories",
+      available_for_sale: true,
+      cart_variant_id: "demo-swap-look-watch",
+    },
+    contextProductBySlot("Bag", 3) || {
+      id: "swap-look-bag",
+      title: "Blue purse",
+      category: "Bag",
+      price: 27,
+      image_url: DEMO_OUTFIT_IMAGES.purse,
+      support_slot: "Bag",
+      available_for_sale: true,
+      cart_variant_id: "demo-swap-look-bag",
+    },
+    contextProductBySlot("Shoes", 2) || {
+      id: "swap-look-shoes",
+      title: "Sneakers",
+      category: "Shoes",
+      price: 25,
+      image_url: DEMO_OUTFIT_IMAGES.sneakers,
+      support_slot: "Shoes",
+      available_for_sale: true,
+      cart_variant_id: "demo-swap-look-shoes",
+    },
+  ];
+  return { composition, alternatives };
+}
+
+function renderOutfitSwapOptionsScreen(context, selectedProduct, selectedAlternative = null) {
+  setOutfitSwapHeaderActive(context);
+  clearActivePromptPanels();
+  addMessage("Here are some swap options", "bot");
+
+  const { composition, alternatives } = buildOutfitSwapOptionProducts(selectedProduct, selectedAlternative);
+  const panel = document.createElement("section");
+  panel.className = "outfit-swap-options-panel figma-card-screen";
+
+  const stage = document.createElement("div");
+  stage.className = "outfit-swap-options-stage";
+
+  const compositionGrid = document.createElement("div");
+  compositionGrid.className = "outfit-swap-composition-grid";
+  compositionGrid.appendChild(buildDemoSwapFlatlayVisual(composition[1]));
+
+  const optionList = document.createElement("div");
+  optionList.className = "outfit-swap-option-list";
+  alternatives.forEach((product) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "outfit-swap-option-card";
+    const close = document.createElement("span");
+    close.className = "outfit-swap-option-close";
+    close.textContent = "×";
+    const media = document.createElement("div");
+    media.className = "outfit-swap-option-media";
+    media.appendChild(buildImageTile(product));
+    const name = document.createElement("span");
+    name.className = "outfit-swap-option-name";
+    name.textContent = product.title;
+    const price = document.createElement("span");
+    price.className = "outfit-swap-option-price";
+    price.textContent = `€${product.price}`;
+    option.append(close, media, name, price);
+    option.addEventListener("click", () => {
+      addMessage(product.title, "user");
+      const replacement = getDemoSwapReplacementProduct(product, selectedProduct);
+      const updated = context.products.map((item) =>
+        item.id === selectedProduct.id || item.support_slot === selectedProduct.support_slot
+          ? replacement
+          : item
+      );
+      const nextContext = { ...context, products: updated, recommendedProductIds: updated.map((item) => item.id) };
+      latestRecommendationContext = nextContext;
+      renderOutfitSwapOptionsScreen(nextContext, selectedProduct, product);
+    });
+    optionList.appendChild(option);
+  });
+
+  stage.append(compositionGrid, optionList);
+
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className = "outfit-swap-add-button";
+  addButton.textContent = shouldUseViewProductInstead(composition) ? "View Product" : "Add to cart";
+  addButton.addEventListener("click", () => {
+    if (shouldUseViewProductInstead(composition)) {
+      showProductViewForLocalDemo(composition, context, {
+        heading: "View these swap products in the demo:",
+      });
+      return;
+    }
+    void addProductsToCartBulk(composition, addButton);
+  });
+
+  panel.append(stage, addButton);
+  chatLog.appendChild(panel);
+  scrollChatToBottom();
+}
+
+function startOutfitOnboardingFlow() {
+  homeViewActive = false;
+  setMode("outfit", { silent: true });
+  syncWidgetHeader("outfit");
+  if (widgetPanel) {
+    widgetPanel.dataset.mode = "outfit";
+  }
+  resetGuidedFlow();
+  shopperProfileDraft = createEmptyProfileDraft();
+  pendingDecisionRequest = null;
+  guidedFlow = {
+    type: "outfit_onboarding",
+    stepIndex: 0,
+    questions: getOutfitOnboardingSequence(),
+  };
+  askGuidedQuestion();
+}
+
 function startOutfitConversation(openingRequest = "") {
   homeViewActive = false;
   setMode("outfit");
@@ -5480,8 +6551,7 @@ function startOutfitConversation(openingRequest = "") {
     return;
   }
 
-  addMessage("Tell me what you need and I’ll create the full outfit.", "bot");
-  showOutfitBuilderScreen();
+  startOutfitOnboardingFlow();
 }
 
 function startImageConversation(flowType) {
@@ -5547,7 +6617,7 @@ function activateFeature(mode, options = {}) {
   }
 
   if (mode === "inspire") {
-    startImageConversation("inspire");
+    startGetInspiredDemoFlow();
     return;
   }
 
@@ -5611,9 +6681,25 @@ function handleGuidedAnswer(value, displayText = value) {
       guidedFlow.questions.splice(guidedFlow.stepIndex + 1, 0, {
         key: "vibe_preset",
         prompt: "What vibe are you going for?",
-        options: profileOptions.feel,
+        options: [
+          "Effortless Chic",
+          "Edgy & Bold",
+          "Soft & Romantic",
+          "Effortless Chic",
+          "Edgy & Bold",
+          "Soft & Romantic",
+        ],
         variant: "preset-grid",
       });
+      guidedFlow.stepIndex += 1;
+      askGuidedQuestion();
+      return;
+    }
+    if (value === "pinterest" || value === "upload") {
+      clearActivePromptPanels();
+      shopperProfileDraft.fit_preference =
+        value === "pinterest" ? "Pinterest board" : "Uploaded screenshots";
+      shopperProfileDraft.feel = shopperProfileDraft.feel || "Edgy and bold";
       guidedFlow.stepIndex += 1;
       askGuidedQuestion();
       return;
@@ -5678,18 +6764,11 @@ function completeGuidedFlow() {
     addMessage(`Thanks! Let me curate some outfits for your ${styleNote}${location} look!`, "bot");
 
     const profileInputs = buildProfileInputsPayload();
-    const contextPrompt =
-      [
-        buildProfileNarrative(profileInputs, "outfit"),
-        shopperProfileDraft.location ? `Location: ${shopperProfileDraft.location}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ") || "Build my outfit";
-
-    sendTextChat(contextPrompt, {
-      displayText: buildDisplaySummary(profileInputs) || "Create full outfit",
-      profileInputs,
-    });
+    const typingState = showTypingState("outfit");
+    window.setTimeout(() => {
+      removeTypingState(typingState);
+      renderCreateFullOutfitResult(profileInputs);
+    }, 500);
     return;
   }
 
@@ -6218,6 +7297,26 @@ function canUseStorefrontCart() {
   return Boolean(getCartRoot());
 }
 
+function isDemoProduct(product) {
+  return String((product && product.id) || "").startsWith("demo-");
+}
+
+function shouldUseViewProductInstead(products) {
+  const safeProducts = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  return !canUseStorefrontCart() || safeProducts.some(isDemoProduct);
+}
+
+function showProductViewForLocalDemo(products, context = null, options = {}) {
+  const safeProducts = Array.isArray(products) ? products.filter(Boolean) : [products].filter(Boolean);
+  if (!safeProducts.length) {
+    return;
+  }
+  addInspiredItemListPanel(safeProducts, context || latestRecommendationContext, {
+    heading: options.heading || "View these products in the demo:",
+    viewOnly: true,
+  });
+}
+
 function formatPrice(price) {
   if (price === null || price === undefined || price === "") {
     return "Price on product page";
@@ -6240,6 +7339,9 @@ function formatOutfitTotalPrice(price) {
 }
 
 function buildOutfitLookTitle(profile) {
+  if (profile && profile.look_title) {
+    return profile.look_title;
+  }
   const style = (profile && (profile.feeling_goal || profile.feel)) || shopperProfileDraft.feel || "";
   const location =
     (profile && (profile.occasion_context || profile.location)) ||
@@ -6330,11 +7432,16 @@ function applyDemoSwap(originalProduct, replacementProduct) {
   renderSwapScreen(products, null, null);
   updateOutfitCarouselFromContext(swapScreenContext);
   if (swapScreenHint) {
-    swapScreenHint.textContent = "Tap another item to keep swapping, or add the look to cart.";
+    swapScreenHint.textContent = shouldUseViewProductInstead(swapScreenContext.products)
+      ? "Tap another item to keep swapping, or view the products in this look."
+      : "Tap another item to keep swapping, or add the look to cart.";
   }
 }
 
 function renderSwapScreen(products, selectedId = null, alternatives = null, swapTarget = null) {
+  if (swapAddToCartButton) {
+    swapAddToCartButton.textContent = shouldUseViewProductInstead(products) ? "View Product" : "Add to cart";
+  }
   if (swapComposition) {
     swapComposition.innerHTML = "";
     swapComposition.appendChild(
@@ -6797,9 +7904,11 @@ function addPendingImagePreview(previewUrl, caption = "") {
 
 function renderOutfitCarouselCard(panel, card, products, profile, insights, context, carouselIndex = 0, carouselTotal = 1) {
   card.innerHTML = "";
-  card.className = "outfit-carousel-card outfit-carousel-card--stacked";
+  card.className = "outfit-carousel-card";
 
-  const visual = buildLookCompositionVisual(products);
+  const useDemoCollage =
+    context && (context.contextNote === "Create full outfit demo" || context.contextNote === "Get inspired demo");
+  const visual = useDemoCollage ? buildDemoOutfitCollageVisual(products) : buildLookCompositionVisual(products);
   card.appendChild(visual);
 
   const body = document.createElement("div");
@@ -6813,7 +7922,9 @@ function renderOutfitCarouselCard(panel, card, products, profile, insights, cont
   const price = document.createElement("p");
   price.className = "outfit-carousel-price";
   price.textContent =
-    totalPrice > 0 ? formatOutfitTotalPrice(totalPrice) : formatOutfitTotalPrice(products[0].price);
+    context && context.outfitPriceLabel
+      ? context.outfitPriceLabel
+      : totalPrice > 0 ? formatOutfitTotalPrice(totalPrice) : formatOutfitTotalPrice(products[0].price);
 
   const description = document.createElement("p");
   description.className = "outfit-carousel-description";
@@ -6888,17 +7999,25 @@ function renderOutfitCarouselCard(panel, card, products, profile, insights, cont
   const actions = document.createElement("div");
   actions.className = "outfit-carousel-actions";
 
-  const viewButton = document.createElement("button");
-  viewButton.type = "button";
-  viewButton.className = "outfit-carousel-cta outfit-carousel-cta--primary";
-  viewButton.textContent = "View outfit";
-  viewButton.addEventListener("click", () => {
-    const leadProduct = products.find((item) => item.product_url) || products[0];
-    if (leadProduct && leadProduct.product_url) {
-      window.open(leadProduct.product_url, "_blank", "noopener,noreferrer");
+  const newOutfitsButton = document.createElement("button");
+  newOutfitsButton.type = "button";
+  newOutfitsButton.className = "outfit-carousel-cta outfit-carousel-cta--primary";
+  newOutfitsButton.textContent = "New outfits";
+  newOutfitsButton.addEventListener("click", () => {
+    addMessage("New outfits", "user");
+    addMessage("I’ll keep the same brief and show you another direction next.", "bot");
+  });
+
+  const cartButton = document.createElement("button");
+  cartButton.type = "button";
+  cartButton.className = "outfit-carousel-cta outfit-carousel-cta--primary";
+  cartButton.textContent = shouldUseViewProductInstead(products) ? "View Product" : "Add to cart";
+  cartButton.addEventListener("click", () => {
+    if (shouldUseViewProductInstead(products)) {
+      showProductViewForLocalDemo(products, context);
       return;
     }
-    addMessage("Open any piece from the look to explore sizing and details on the product page.", "bot");
+    void addProductsToCartBulk(products, cartButton);
   });
 
   const swapButton = document.createElement("button");
@@ -6907,11 +8026,20 @@ function renderOutfitCarouselCard(panel, card, products, profile, insights, cont
   swapButton.textContent = "Swap items";
   swapButton.addEventListener("click", () => {
     if (context) {
+      if (context.contextNote === "Create full outfit demo" || context.contextNote === "Get inspired demo") {
+        addMessage("Swap items", "user");
+        renderOutfitSwapSelectionScreen(context);
+        return;
+      }
       openSwapItemsScreen(context);
     }
   });
 
-  actions.append(viewButton, swapButton);
+  if (context && context.hideNewOutfits) {
+    actions.append(swapButton, cartButton);
+  } else {
+    actions.append(newOutfitsButton, cartButton, swapButton);
+  }
   body.append(title, price, description, whyHeading, whyList, nav, actions);
   card.appendChild(body);
 
@@ -7046,8 +8174,12 @@ function addCompleteLookComposition(products, profile, context = null) {
   const cartButton = document.createElement("button");
   cartButton.type = "button";
   cartButton.className = "look-preview-cta";
-  cartButton.textContent = "Add to cart";
+  cartButton.textContent = shouldUseViewProductInstead(products) ? "View Product" : "Add to cart";
   cartButton.addEventListener("click", () => {
+    if (shouldUseViewProductInstead(products)) {
+      showProductViewForLocalDemo(products, context);
+      return;
+    }
     void addProductsToCartBulk(products, cartButton);
   });
 
@@ -7391,6 +8523,20 @@ async function addProductToCart(product, button) {
 }
 
 async function addProductsToCartBulk(products, button) {
+  const safeProducts = (products || []).filter(Boolean);
+  const isDemoLook = safeProducts.length > 0 && safeProducts.every((product) =>
+    String(product.id || "").startsWith("demo-")
+  );
+
+  if (isDemoLook) {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Added";
+    }
+    addMessage("I added the selected look to your demo cart.", "bot");
+    return;
+  }
+
   const validProducts = (products || []).filter(
     (product) => product && (product.cart_variant_id || product.handle) && product.available_for_sale !== false
   );
@@ -7512,9 +8658,16 @@ function createRecommendationCard(product, options = {}) {
   const addButton = document.createElement("button");
   addButton.className = "primary-action";
   addButton.type = "button";
-  addButton.textContent = product.available_for_sale === false ? "Sold out" : "Add to Cart";
-  addButton.disabled = !product.cart_variant_id || product.available_for_sale === false;
-  addButton.addEventListener("click", () => addProductToCart(product, addButton));
+  const useProductView = shouldUseViewProductInstead(product);
+  addButton.textContent = product.available_for_sale === false ? "Sold out" : useProductView ? "View Product" : "Add to Cart";
+  addButton.disabled = (!useProductView && !product.cart_variant_id) || product.available_for_sale === false;
+  addButton.addEventListener("click", () => {
+    if (useProductView) {
+      showProductViewForLocalDemo(product);
+      return;
+    }
+    addProductToCart(product, addButton);
+  });
   actions.appendChild(addButton);
 
   if (!options.compact) {
@@ -8122,6 +9275,10 @@ async function handleConversationAction(action, context, button, panel, options 
     }
 
     if (action.action === "cart") {
+      if (shouldUseViewProductInstead(context.products || [])) {
+        showProductViewForLocalDemo(context.products || [], context);
+        return;
+      }
       await addProductsToCartBulk(context.products || [], button);
       return;
     }
@@ -8545,9 +9702,16 @@ function addInspiredHeroMatch(heroProduct, imageAnalysis, shopperProfile) {
   const addButton = document.createElement("button");
   addButton.className = "primary-action";
   addButton.type = "button";
-  addButton.textContent = "Add to Cart";
-  addButton.disabled = !heroProduct.cart_variant_id;
-  addButton.addEventListener("click", () => addProductToCart(heroProduct, addButton));
+  const useProductView = shouldUseViewProductInstead(heroProduct);
+  addButton.textContent = useProductView ? "View Product" : "Add to Cart";
+  addButton.disabled = !useProductView && !heroProduct.cart_variant_id;
+  addButton.addEventListener("click", () => {
+    if (useProductView) {
+      showProductViewForLocalDemo(heroProduct);
+      return;
+    }
+    addProductToCart(heroProduct, addButton);
+  });
   actions.appendChild(addButton);
 
   body.append(topline, title, reason, actions);
@@ -8682,8 +9846,7 @@ async function sendTextChat(rawMessage, options = {}) {
       addMessage(options.displayText || trimmedMessage || "Create full outfit", "user");
     }
     chatInput.value = "";
-    addMessage("Pick the basics below and I’ll build a clear outfit from real store products.", "bot");
-    showOutfitBuilderScreen();
+    startOutfitOnboardingFlow();
     return;
   }
 
@@ -9085,6 +10248,10 @@ if (swapAddToCartButton) {
     if (!swapScreenContext) {
       return;
     }
+    if (shouldUseViewProductInstead(swapScreenContext.products || [])) {
+      showProductViewForLocalDemo(swapScreenContext.products || [], swapScreenContext);
+      return;
+    }
     void addProductsToCartBulk(swapScreenContext.products || [], swapAddToCartButton);
   });
 }
@@ -9193,16 +10360,7 @@ function launchDemoPreviewFlow() {
   }
 
   if (flow === "inspire") {
-    homeViewActive = false;
-    inspireFlowContext = { path: "browse", styleCategory: null, pinterestUrl: "" };
-    setMode("inspire", { silent: true });
-    syncWidgetHeader("inspire");
-    syncHeaderHomeButton("inspire");
-    chatLog.innerHTML = "";
-    void showInspireStyleGrid();
-    window.setTimeout(() => {
-      void handleInspireStyleSelection(INSPIRE_STYLE_CATEGORIES[2]);
-    }, 700);
+    startGetInspiredDemoFlow();
     return;
   }
 
@@ -9228,10 +10386,26 @@ function launchDemoPreviewFlow() {
     syncHeaderHomeButton("outfit");
     chatLog.innerHTML = "";
     window.setTimeout(() => {
-      renderBotResponse(buildDemoChatResponse("outfit"), "Create full outfit", {
-        uiMode: "outfit",
-        backendMode: backendModes.outfit,
-      });
+      addMessage("Create full outfit", "user");
+      addMessage("Great! What's the occasion for today?", "bot");
+      addMessage("Casual", "user");
+      addMessage("What vibe are you going for?", "bot");
+      addMessage("Choose from presets", "user");
+      addMessage("What vibe are you going for?", "bot");
+      addMessage("Edgy and bold", "user");
+      addMessage("Nice! Where will you be wearing this outfit?", "bot");
+      addMessage("Paris", "user");
+      addMessage("What kind of weather do you expect there?", "bot");
+      addMessage("Hot", "user");
+      shopperProfileDraft = {
+        ...createEmptyProfileDraft(),
+        occasion: "Casual",
+        feel: "Edgy and bold",
+        location: "Paris",
+        weather: "Hot",
+      };
+      addMessage("Thanks! Let me curate some outfits for your edgy and bold Paris look!", "bot");
+      renderCreateFullOutfitResult(buildProfileInputsPayload());
     }, 700);
   }
 }
@@ -9252,7 +10426,7 @@ async function initializeWidget() {
     applyAuthIdentity(session);
   }
 
-  if (params.get("reset_onboarding") === "1") {
+  if (params.get("reset_onboarding") === "1" || params.get("logout") === "1" || params.get("login") === "1") {
     try {
       sessionStorage.setItem(FORCE_ONBOARDING_AFTER_LOGIN_KEY, "1");
     } catch (error) {
@@ -9265,6 +10439,12 @@ async function initializeWidget() {
     } catch (error) {
       /* ignore storage errors */
     }
+  }
+
+  if (params.get("login") === "1" || params.get("logout") === "1") {
+    showAuthScreen("login");
+    startCustomizationRefreshLoop();
+    return;
   }
 
   if (!isAuthenticated()) {

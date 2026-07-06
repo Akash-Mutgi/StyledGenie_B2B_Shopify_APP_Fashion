@@ -44,6 +44,10 @@ if merchant_dashboard_dir.exists():
     app.mount("/merchant-dashboard", StaticFiles(directory=merchant_dashboard_dir, html=True), name="merchant-dashboard")
 
 if storefront_widget_dir.exists():
+    @app.get("/storefront-widget-demo/", include_in_schema=False)
+    def storefront_widget_demo_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/storefront-widget-demo/index.html?login=1")
+
     app.mount("/storefront-widget-demo", StaticFiles(directory=storefront_widget_dir, html=True), name="storefront-widget-demo")
 
 app.mount("/static", StaticFiles(directory=backend_root / "static"), name="static")

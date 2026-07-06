@@ -56,13 +56,14 @@ Learn in this order:
 7. Supabase tables and SQL
 8. Shopify app basics
 
-## Your First 5 Actions
+## Your First 6 Actions
 
-1. Read `docs/PROJECT_SCOPE_AND_DEV_PLAN.md`.
-2. Read `docs/BEGINNER_ROADMAP.md`.
-3. Open the files in `apps/storefront-widget/`.
-4. Open the files in `apps/merchant-dashboard/`.
-5. Read `backend/app/main.py`.
+1. Read `docs/PROCESS_AND_ARCHITECTURE.md`.
+2. Read `docs/PROJECT_SCOPE_AND_DEV_PLAN.md`.
+3. Read `docs/BEGINNER_ROADMAP.md`.
+4. Open the files in `apps/storefront-widget/`.
+5. Open the files in `apps/merchant-dashboard/`.
+6. Read `backend/app/main.py`.
 
 ## Important Rule
 

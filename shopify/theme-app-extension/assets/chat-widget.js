@@ -652,27 +652,31 @@
     return [brief];
   }
 
+  const BOT_AVATAR_LOGO = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="styledGenieBotAvatarGradient" x1="5" y1="3" x2="19" y2="21" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#f06fd8"/>
+        <stop offset="0.48" stop-color="#c45cf3"/>
+        <stop offset="1" stop-color="#8d4df7"/>
+      </linearGradient>
+      <filter id="styledGenieBotAvatarShadow" x="-4" y="-2" width="32" height="32" color-interpolation-filters="sRGB">
+        <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#8d4df7" flood-opacity=".22"/>
+      </filter>
+    </defs>
+    <circle cx="12" cy="12" r="10.8" fill="url(#styledGenieBotAvatarGradient)" filter="url(#styledGenieBotAvatarShadow)"/>
+    <g stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="7.95" r="3.05"/>
+      <circle cx="8.35" cy="14.25" r="3.05"/>
+      <circle cx="15.65" cy="14.25" r="3.05"/>
+      <path d="M10.45 10.6 9.9 11.55M13.55 10.6l.55.95M11.4 14.25h1.2"/>
+    </g>
+  </svg>`;
+
   function createMessageAvatar(role) {
     const avatar = document.createElement("div");
     avatar.className = "styledgenie-message-avatar";
     if (role === "bot") {
-      const brandName =
-        (latestCustomization &&
-          (latestCustomization.brand_name || latestCustomization.assistant_name)) ||
-        (assistantNameNode ? assistantNameNode.textContent : defaultAssistantName) ||
-        defaultAssistantName;
-
-      if (latestCustomization && latestCustomization.logo_url) {
-        avatar.classList.add("has-image");
-        const image = document.createElement("img");
-        image.src = latestCustomization.logo_url;
-        image.alt = `${brandName} logo`;
-        image.loading = "lazy";
-        avatar.appendChild(image);
-        return avatar;
-      }
-
-      avatar.textContent = getBrandInitials(brandName);
+      avatar.innerHTML = BOT_AVATAR_LOGO;
       return avatar;
     }
 
