@@ -132,7 +132,9 @@ class RecommendationService:
         return None
 
     def _segment_scores_from_text(self, text: str, bucket: str = "general") -> tuple[int, int]:
-        padded_text = f" {text.lower()} "
+        normalized_text = re.sub(r"\bmen['’]s\b", "mens", text.lower())
+        normalized_text = re.sub(r"\bwomen['’]s\b", "womens", normalized_text)
+        padded_text = f" {re.sub(r'[^a-z0-9]+', ' ', normalized_text).strip()} "
         mens_tokens = {
             " men ",
             " men's ",
@@ -239,13 +241,13 @@ class RecommendationService:
         terms: Optional[set[str]] = None,
         anchor_product: Optional[dict] = None,
     ) -> Optional[str]:
+        if shopper_profile and shopper_profile.segment_preference in self.strict_segments:
+            return shopper_profile.segment_preference
+
         if anchor_product:
             anchor_segment = self.normalize_product_segment(anchor_product)
             if anchor_segment in self.strict_segments:
                 return anchor_segment
-
-        if shopper_profile and shopper_profile.segment_preference in self.strict_segments:
-            return shopper_profile.segment_preference
 
         inferred = self._infer_request_segment(query_text, shopper_profile, terms or set())
         return inferred if inferred in self.strict_segments else None
@@ -263,7 +265,7 @@ class RecommendationService:
         if required_segment not in self.strict_segments:
             return False
         segment = self.normalize_product_segment(product)
-        return segment == required_segment or segment == "unknown"
+        return segment == required_segment
 
     def _segment_rank(self, product: dict, required_segment: str) -> int:
         return 1 if self.normalize_product_segment(product) == required_segment else 0
@@ -1342,6 +1344,7 @@ class RecommendationService:
 
         catalog = self._filter_catalog_by_segment(self._catalog(), target_segment)
         budget_cap = self._parse_budget_cap(query_text)
+        catalog = [product for product in catalog if self._product_within_budget(product, budget_cap)]
         accessory_requested = self._accessory_requested(query_text, normalized_terms)
         excluded_ids = {item for item in (exclude_product_ids or []) if item}
         palette_strategy = self._text_palette_strategy(
@@ -1477,7 +1480,7 @@ class RecommendationService:
         catalog = [
             product
             for product in self._filter_catalog_by_segment(self._catalog(), required_segment)
-            if product.get("id") not in excluded_ids
+            if product.get("id") not in excluded_ids and self._product_within_budget(product, budget_cap)
         ]
         if not catalog:
             return []
@@ -1641,7 +1644,7 @@ class RecommendationService:
         catalog = [
             product
             for product in self._filter_catalog_by_segment(self._catalog(), required_segment)
-            if product.get("id") not in excluded_ids
+            if product.get("id") not in excluded_ids and self._product_within_budget(product, budget_cap)
         ]
         if not catalog:
             return []
@@ -2692,14 +2695,34 @@ class RecommendationService:
         if not query_text:
             return None
 
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:€|eur|euro|euros)", query_text.lower())
-        if not match:
+        normalized = query_text.lower().replace(",", ".")
+        if not re.search(
+            r"\b(?:budget|under|below|up to|maximum|max|within|eur|euro|euros)\b|€",
+            normalized,
+        ):
+            return None
+        if "open budget" in normalized or re.search(
+            r"(?:€|eur|euro|euros)?\s*\d+(?:\.\d+)?\s*\+",
+            normalized,
+        ):
             return None
 
-        try:
-            return float(match.group(1))
-        except ValueError:
+        range_match = re.search(
+            r"(?:€|eur|euro|euros)?\s*(\d+(?:\.\d+)?)\s*(?:[-–—]|\bto\b)\s*"
+            r"(?:€|eur|euro|euros)?\s*(\d+(?:\.\d+)?)",
+            normalized,
+        )
+        if range_match:
+            return max(float(range_match.group(1)), float(range_match.group(2)))
+
+        amount_match = re.search(
+            r"(?:under|below|up to|maximum|max|budget(?:\s+of)?|within)?\s*"
+            r"(?:€|eur|euro|euros)?\s*(\d+(?:\.\d+)?)\s*(?:€|eur|euro|euros)?",
+            normalized,
+        )
+        if not amount_match:
             return None
+        return float(amount_match.group(1))
 
     def _price_value(self, price: object) -> Optional[float]:
         if price in (None, ""):
@@ -2710,21 +2733,29 @@ class RecommendationService:
         except (TypeError, ValueError):
             return None
 
+    def _product_within_budget(self, product: dict, budget_cap: Optional[float]) -> bool:
+        if budget_cap is None:
+            return True
+        price_value = self._price_value(product.get("price"))
+        return price_value is not None and price_value <= budget_cap
+
     def fallback_segment_products(
         self,
         *,
         required_segment: str,
         limit: int = 3,
         exclude_product_ids: Optional[list[str]] = None,
+        query_text: str = "",
     ) -> list[ProductRecommendation]:
         if required_segment not in self.strict_segments:
             return []
 
         excluded_ids = {item for item in (exclude_product_ids or []) if item}
+        budget_cap = self._parse_budget_cap(query_text)
         catalog = [
             product
             for product in self._filter_catalog_by_segment(self._catalog(), required_segment)
-            if product.get("id") not in excluded_ids
+            if product.get("id") not in excluded_ids and self._product_within_budget(product, budget_cap)
         ]
         scored_products = [
             self._score_product(
@@ -3036,6 +3067,15 @@ class RecommendationService:
         if (item.segment or "").strip().lower() != required_segment:
             result.status = "repairable"
             result.failed_rules.append("segment_mode")
+        if row is not None and not self._product_segment_compatible(row, required_segment):
+            result.status = "fail"
+            if "segment_mode" not in result.failed_rules:
+                result.failed_rules.append("segment_mode")
+
+        budget_cap = self._parse_budget_cap(query_text)
+        if row is not None and not self._product_within_budget(row, budget_cap):
+            result.status = "fail"
+            result.failed_rules.append("budget_limit")
         occasion = (shopper_profile.occasion_context or "").lower() if shopper_profile else ""
         weather = (shopper_profile.weather_context or "").lower() if shopper_profile else ""
 
@@ -3554,6 +3594,8 @@ class RecommendationService:
         for product in self._filter_catalog_by_segment(self._catalog(), target_segment):
             product_id = product.get("id")
             if not product_id or product_id in current_ids:
+                continue
+            if not self._product_within_budget(product, budget_cap):
                 continue
 
             base = self._score_product(

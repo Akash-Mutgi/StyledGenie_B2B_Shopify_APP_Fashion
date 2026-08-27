@@ -5,6 +5,7 @@ from app.models.schemas import (
     ChatResponse,
     FeedbackRequest,
     ImageRequest,
+    OnboardingScanAnalysisResponse,
     RecommendationRefineRequest,
     SaveResponse,
 )
@@ -25,6 +26,11 @@ def chat(payload: ChatRequest) -> ChatResponse:
 @router.post("/api/inspire", response_model=ChatResponse)
 def inspire(payload: ImageRequest) -> ChatResponse:
     return conversation_service.handle_image_chat(payload, "get_inspired")
+
+
+@router.post("/api/onboarding/analyze-scan", response_model=OnboardingScanAnalysisResponse)
+def analyze_onboarding_scan(payload: ImageRequest) -> OnboardingScanAnalysisResponse:
+    return conversation_service.analyze_onboarding_scan(payload)
 
 
 @router.post("/api/support-image", response_model=ChatResponse)

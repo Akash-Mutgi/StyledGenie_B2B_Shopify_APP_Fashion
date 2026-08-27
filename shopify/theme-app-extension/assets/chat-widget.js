@@ -9,6 +9,20 @@
   const cartRoot =
     root.dataset.cartRoot ||
     ((window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/");
+  const storefrontPurchases = Array.from(root.querySelectorAll("[data-styledgenie-purchase]"))
+    .map((node) => ({
+      title: node.dataset.title || "Purchased item",
+      image_url: node.dataset.imageUrl || "",
+      purchased_at: node.dataset.purchasedAt || "",
+      variant_title: node.dataset.variantTitle === "Default Title" ? "" : node.dataset.variantTitle || "",
+      price: node.dataset.price || "",
+    }))
+    .filter((item) => item.image_url)
+    .filter((item, index, items) =>
+      items.findIndex((candidate) =>
+        candidate.title === item.title && candidate.variant_title === item.variant_title
+      ) === index
+    );
   const storefrontProductCache = new Map();
   const customerId = "shopify-storefront-guest";
   let activeMode = "outfit_curation";
@@ -1115,7 +1129,7 @@
     const isGuided = isGuidedFeature(mode);
     const signalLabel =
       voiceState.active && canUseVoiceInput(mode) ? "Listening…" : config.signalLabel;
-    const plusEnabled = mode !== "support" || canUseSupportImageUpload(mode);
+    const plusEnabled = true;
 
     input.placeholder = config.placeholder;
     input.disabled = !config.textEnabled;
@@ -1613,10 +1627,107 @@
   }
 
   function getImageActionSuggestions() {
-    return [
+    const actions = [
       { label: "Use camera", action: "camera" },
       { label: "Upload image", action: "upload" },
     ];
+    if (activeMode === "complete_the_look") {
+      actions.push({ label: "Past purchases", action: "past_purchases" });
+    }
+    return actions;
+  }
+
+  function prepareComposerQuickActions() {
+    if (!composerQuickActions) {
+      return;
+    }
+    const buttons = Array.from(composerQuickActions.querySelectorAll("button"));
+    if (buttons.length < 2) {
+      return;
+    }
+
+    if (activeMode === "support" && !canUseSupportImageUpload()) {
+      buttons[0].dataset.action = "support_damage";
+      buttons[0].textContent = "Damaged item photo";
+      buttons[1].dataset.action = "support_wrong_item";
+      buttons[1].textContent = "Wrong item photo";
+      return;
+    }
+
+    buttons[0].dataset.action = "camera";
+    buttons[0].textContent = "Use Camera";
+    buttons[1].dataset.action = "upload";
+    buttons[1].textContent = "Upload Image";
+  }
+
+  function renderPastPurchasesPicker() {
+    clearActivePromptPanels();
+    addMessage("Pick an item and Iâ€™ll complete the look.", "bot");
+
+    const panel = document.createElement("section");
+    panel.className = "styledgenie-purchases-panel";
+    const loading = document.createElement("p");
+    loading.className = "styledgenie-purchases-status";
+    loading.textContent = "Loading your itemsâ€¦";
+    panel.appendChild(loading);
+    messages.appendChild(panel);
+    messages.scrollTop = messages.scrollHeight;
+
+    const products = storefrontPurchases.slice(0, 5);
+    panel.innerHTML = "";
+
+    if (!products.length) {
+      loading.textContent = root.dataset.customerEmail
+        ? "I couldnâ€™t find a recent item with an image. Upload a photo instead."
+        : "Sign in to see past purchases, or upload a photo instead.";
+      panel.appendChild(loading);
+      return;
+    }
+
+    products.forEach((product) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "styledgenie-purchase-row";
+
+      const image = document.createElement("img");
+      image.src = product.image_url;
+      image.alt = product.title || "Purchased item";
+      image.loading = "lazy";
+
+      const copy = document.createElement("span");
+      copy.className = "styledgenie-purchase-copy";
+      const title = document.createElement("strong");
+      title.textContent = product.title || "Purchased item";
+      const meta = document.createElement("span");
+      meta.textContent = [
+        product.purchased_at ? `Purchased: ${product.purchased_at}` : "",
+        product.variant_title || "",
+        product.price || "",
+      ]
+        .filter(Boolean)
+        .join(" Â· ");
+      copy.append(title, meta);
+
+      const plus = document.createElement("span");
+      plus.className = "styledgenie-purchase-plus";
+      plus.setAttribute("aria-hidden", "true");
+      plus.textContent = "+";
+
+      row.append(image, copy, plus);
+      row.addEventListener("click", () => {
+        panel.querySelectorAll("button").forEach((button) => {
+          button.disabled = true;
+        });
+        void sendImageChat(
+          `Complete my look around ${product.title || "this item"}.`,
+          null,
+          product.image_url
+        );
+      });
+      panel.appendChild(row);
+    });
+
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function handleImageActionSelection(option) {
@@ -1625,6 +1736,21 @@
     }
     setComposerQuickActionsOpen(false);
 
+    if (option.action === "support_damage" || option.action === "support_wrong_item") {
+      const isDamage = option.action === "support_damage";
+      supportUploadContext = {
+        intent: isDamage ? "damage_issue" : "wrong_item_issue",
+        uploadEnabled: true,
+        source: "shopper_attachment",
+      };
+      input.value = isDamage
+        ? "The item I received is damaged."
+        : "I received the wrong item.";
+      syncInteractionUI("support");
+      launchImagePicker("upload");
+      return;
+    }
+
     if (option.action === "camera") {
       openCameraCapture();
       return;
@@ -1632,6 +1758,12 @@
 
     if (option.action === "upload") {
       launchImagePicker("upload");
+      return;
+    }
+
+    if (option.action === "past_purchases") {
+      addMessage(option.label, "user");
+      void renderPastPurchasesPicker();
     }
   }
 
@@ -4108,7 +4240,7 @@
             imageAnalysis: data.image_analysis || null,
             gapAnalysis: data.gap_analysis || null,
             orchestrationContext: data.orchestration_context || null,
-            decisionMode: Boolean(data.shopper_profile && data.shopper_profile.decision_style === "decisive"),
+            decisionMode: requestMeta.decisionMode === true,
           }
         : null;
     if (!isSupportResponse) {
@@ -4151,10 +4283,15 @@
     }
 
     const displayText = options.displayText || trimmedMessage || buildDisplaySummary(profileInputs);
+    const requestedDecisionMode = options.decisionMode;
     const inferredDecisionMode =
-      options.decisionMode === undefined
+      requestedDecisionMode === undefined
         ? inferDecisionModeFromMessage([trimmedMessage, displayText].filter(Boolean).join(" "))
-        : options.decisionMode;
+        : requestedDecisionMode === true || requestedDecisionMode === "pick_best"
+          ? true
+          : requestedDecisionMode === false || requestedDecisionMode === "options"
+            ? false
+            : null;
 
     pendingDecisionRequest = null;
     if (!options.skipUserEcho) {
@@ -4205,6 +4342,7 @@
       renderAssistantResponse(data, root._styledgenieLastContextNote || structuredPrompt, {
         uiMode: requestMode,
         backendMode: requestMode,
+        decisionMode: inferredDecisionMode,
       });
       imageInput.value = "";
       if (imageUrlInput) {
@@ -4399,6 +4537,8 @@
       previewUrl,
       activeMode === "get_inspired"
         ? "Image ready for inspiration styling"
+        : activeMode === "support"
+          ? "Support photo ready"
         : "Image ready to complete your look"
     );
     resetCameraCard();
@@ -4419,6 +4559,7 @@
 
   composerPlusButton.addEventListener("click", (event) => {
     event.stopPropagation();
+    prepareComposerQuickActions();
     setComposerQuickActionsOpen(composerQuickActions.classList.contains("hidden"));
   });
 

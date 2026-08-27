@@ -487,6 +487,10 @@ class SupabaseService:
         return None
 
     def _backfill_catalog_product_cards(self, products: list[dict]) -> list[dict]:
+        # Inventory fields are optional card metadata. Older Supabase schemas may
+        # not have them yet, and fetching them live for the entire catalog makes
+        # every storefront catalog request wait on Shopify. Only backfill fields
+        # required to render and purchase a product card.
         missing_products = [
             item
             for item in products
@@ -495,8 +499,6 @@ class SupabaseService:
                 not item.get("handle")
                 or not item.get("product_url")
                 or not item.get("shopify_variant_id")
-                or item.get("inventory_quantity") is None
-                or item.get("available_for_sale") is None
             )
         ]
 

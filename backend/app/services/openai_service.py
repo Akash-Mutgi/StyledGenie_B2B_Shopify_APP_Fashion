@@ -13,6 +13,7 @@ from app.models.schemas import (
     CatalogSuggestionResponse,
     ImageAnalysisSummary,
     LookManagementItem,
+    OnboardingScanAnalysisResponse,
     ProductRecommendation,
     ShopperProfile,
     StylingInsight,
@@ -30,11 +31,23 @@ logger = logging.getLogger(__name__)
 
 
 class StylistPlan(BaseModel):
-    reply: str
-    selected_product_ids: list[str] = Field(default_factory=list)
-    styling_insights: list[StylingInsight] = Field(default_factory=list)
-    follow_up_question: Optional[str] = None
-    follow_up_prompts: list[str] = Field(default_factory=list)
+    reply: str = Field(description="Concise shopper-facing recommendation grounded only in supplied evidence.")
+    selected_product_ids: list[str] = Field(
+        default_factory=list,
+        description="One to four exact IDs copied from candidate_products, ordered anchor first.",
+    )
+    styling_insights: list[StylingInsight] = Field(
+        default_factory=list,
+        description="Two or three concrete reasons covering color, silhouette, occasion, or style direction.",
+    )
+    follow_up_question: Optional[str] = Field(
+        default=None,
+        description="One critical question only when a coherent recommendation is otherwise impossible; else null.",
+    )
+    follow_up_prompts: list[str] = Field(
+        default_factory=list,
+        description="Up to three short, actionable next-step prompts.",
+    )
 
 
 class ImageAnalysisPlan(BaseModel):
@@ -56,18 +69,38 @@ class ImageAnalysisPlan(BaseModel):
     observation_lines: list[str] = Field(default_factory=list)
 
 
+class OnboardingScanPlan(BaseModel):
+    full_body_visible: bool = False
+    skin_tone_index: Optional[int] = Field(default=None, ge=0, le=5)
+    body_shape: Optional[str] = None
+    confidence: str = "low"
+    quality_note: str = ""
+
+
 class CompleteLookNarrationPlan(BaseModel):
-    reply: str
-    selected_product_ids: list[str] = Field(default_factory=list)
-    follow_up_prompts: list[str] = Field(default_factory=list)
-    styling_insights: list[StylingInsight] = Field(default_factory=list)
+    reply: str = Field(description="One concise response explaining the completed look without replacing the visible anchor.")
+    selected_product_ids: list[str] = Field(
+        default_factory=list,
+        description="Two to four exact IDs from candidate_products that fill missing outfit categories.",
+    )
+    follow_up_prompts: list[str] = Field(default_factory=list, description="Zero to four allowed next actions.")
+    styling_insights: list[StylingInsight] = Field(
+        default_factory=list,
+        description="Two or three evidence-based explanations of palette, silhouette, occasion, and weather fit.",
+    )
 
 
 class InspiredLookNarrationPlan(BaseModel):
-    reply: str
-    selected_product_ids: list[str] = Field(default_factory=list)
-    follow_up_prompts: list[str] = Field(default_factory=list)
-    styling_insights: list[StylingInsight] = Field(default_factory=list)
+    reply: str = Field(description="One or two concise sentences explaining the hero match and supporting pieces.")
+    selected_product_ids: list[str] = Field(
+        default_factory=list,
+        description="Two to four exact candidate IDs, with the supplied hero product ID first.",
+    )
+    follow_up_prompts: list[str] = Field(default_factory=list, description="Zero to four allowed next actions.")
+    styling_insights: list[StylingInsight] = Field(
+        default_factory=list,
+        description="Two or three concrete similarity reasons based on garment, palette, silhouette, and occasion.",
+    )
 
 
 class SupportIssueImagePlan(BaseModel):
@@ -111,7 +144,7 @@ class CatalogSuggestionPlan(BaseModel):
 
 class OpenAIService:
     def __init__(self) -> None:
-        self.request_timeout_seconds = 8.0
+        self.request_timeout_seconds = settings.openai_timeout_seconds
         self.client = (
             OpenAI(
                 api_key=settings.openai_api_key,
@@ -126,6 +159,14 @@ class OpenAIService:
         self._merchant_context_cache: Optional[dict] = None
         self._merchant_context_cache_at: float = 0.0
         self._merchant_context_cache_ttl_seconds = 90.0
+
+    def _response_options(self) -> dict:
+        """Shared Responses API controls for consistent quality and latency."""
+        return {
+            "model": self.model,
+            "reasoning": {"effort": settings.openai_reasoning_effort},
+            "text": {"verbosity": settings.openai_text_verbosity},
+        }
 
     def style_recommendations(
         self,
@@ -158,11 +199,11 @@ class OpenAIService:
         )
 
         if self.client is None or not segmented_candidates:
-            return fallback_reply, fallback_products, fallback_insights, fallback_follow_up_prompts
+            return fallback_reply, fallback_products, fallback_insights, []
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -187,10 +228,10 @@ class OpenAIService:
             plan = response.output_parsed
         except Exception as error:
             logger.warning("OpenAI stylist call failed. Falling back to local recommendation copy. %s", error)
-            return fallback_reply, fallback_products, fallback_insights, fallback_follow_up_prompts
+            return fallback_reply, fallback_products, fallback_insights, []
 
         if not plan:
-            return fallback_reply, fallback_products, fallback_insights, fallback_follow_up_prompts
+            return fallback_reply, fallback_products, fallback_insights, []
 
         selected_products = self._select_products(segmented_candidates, plan.selected_product_ids)
         if not selected_products:
@@ -200,15 +241,13 @@ class OpenAIService:
         follow_up = (plan.follow_up_question or "").strip()
         styling_insights = plan.styling_insights or fallback_insights
 
-        if follow_up:
+        if follow_up and not selected_products:
             reply = f"{reply} {follow_up}"
 
         if not styling_insights:
             styling_insights = fallback_insights
 
-        follow_up_prompts = [item.strip() for item in (plan.follow_up_prompts or []) if item and item.strip()]
-        if not follow_up_prompts:
-            follow_up_prompts = fallback_follow_up_prompts
+        follow_up_prompts = []
 
         return reply, selected_products, styling_insights[:3], follow_up_prompts[:3]
 
@@ -234,7 +273,7 @@ class OpenAIService:
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -308,6 +347,119 @@ class OpenAIService:
 
         return merged
 
+    def analyze_onboarding_scan(
+        self,
+        *,
+        image_content_base64: Optional[str],
+        image_url: Optional[str],
+        image_mime_type: Optional[str],
+        vision_analysis: VisionAnalysis,
+    ) -> OnboardingScanAnalysisResponse:
+        skin_tones = [
+            ("#f5d0c5", "Fair"),
+            ("#e8b4a0", "Light"),
+            ("#d4a574", "Medium"),
+            ("#c68642", "Warm"),
+            ("#8d5524", "Tan"),
+            ("#5c3d2e", "Deep"),
+        ]
+        body_shape_labels = {
+            "rectangle": "Rectangle",
+            "triangle": "Triangle",
+            "inverted_triangle": "Inverted triangle",
+            "hourglass": "Hourglass",
+            "oval": "Oval",
+        }
+        fallback = OnboardingScanAnalysisResponse(
+            full_body_visible=False,
+            confidence="low",
+            quality_note="I couldn’t confidently read both skin tone and full-body proportions from this image.",
+            message="Please retake a well-lit, front-facing full-body photo or enter these details manually.",
+            vision_source=vision_analysis.source,
+        )
+        if self.client is None or not (image_content_base64 or image_url):
+            return fallback
+
+        mime_type = (image_mime_type or "image/jpeg").strip().lower()
+        image_reference = image_url or f"data:{mime_type};base64,{image_content_base64}"
+        evidence = {
+            "labels": vision_analysis.labels[:8],
+            "objects": vision_analysis.objects[:6],
+            "dominant_color_families": vision_analysis.colors[:4],
+            "summary": vision_analysis.summary,
+            "source": vision_analysis.source,
+        }
+        try:
+            response = self.client.responses.parse(
+                **self._response_options(),
+                input=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Role: visual fit-profile estimator for a fashion onboarding flow. "
+                            "Google Vision evidence was collected first; use it as supporting evidence and inspect the supplied image. "
+                            "Estimate only two editable fashion attributes: visible skin-tone band and body-shape geometry. "
+                            "Never identify the person or infer ethnicity, race, age, health, attractiveness, gender identity, or any other sensitive trait. "
+                            "Skin tone must be an index from 0 to 5: 0 Fair, 1 Light, 2 Medium, 3 Warm, 4 Tan, 5 Deep. "
+                            "Use visible natural skin such as face, neck, or arms; account for lighting and return null if insufficient. "
+                            "Body shape must be one of rectangle, triangle, inverted_triangle, hourglass, or oval, based only on visible shoulder-waist-hip proportions; return null when the full body or outline is obscured. "
+                            "Set full_body_visible true only when shoulders through feet are sufficiently visible. Keep quality_note to one short actionable sentence."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": f"Google Vision evidence: {json.dumps(evidence)}",
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": image_reference,
+                                "detail": "high",
+                            },
+                        ],
+                    },
+                ],
+                text_format=OnboardingScanPlan,
+            )
+            parsed = response.output_parsed
+        except Exception as error:
+            logger.warning("OpenAI onboarding scan analysis failed. %s", error)
+            return fallback
+
+        if not parsed:
+            return fallback
+
+        skin_index = parsed.skin_tone_index
+        if skin_index is not None:
+            skin_index = max(0, min(5, int(skin_index)))
+        body_shape = (parsed.body_shape or "").strip().lower() or None
+        if body_shape not in body_shape_labels:
+            body_shape = None
+        confidence = (parsed.confidence or "low").strip().lower()
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "low"
+        skin_hex, skin_label = skin_tones[skin_index] if skin_index is not None else (None, None)
+        enough_evidence = skin_index is not None or body_shape is not None
+        message = (
+            "I estimated your skin tone and body proportions. Review both before saving."
+            if enough_evidence
+            else "I couldn’t estimate these details confidently. Please retake the photo or enter them manually."
+        )
+        return OnboardingScanAnalysisResponse(
+            full_body_visible=bool(parsed.full_body_visible),
+            skin_tone_index=skin_index,
+            skin_tone_hex=skin_hex,
+            skin_tone_label=skin_label,
+            body_shape=body_shape,
+            body_shape_label=body_shape_labels.get(body_shape),
+            confidence=confidence,
+            quality_note=(parsed.quality_note or fallback.quality_note).strip(),
+            message=message,
+            vision_source=vision_analysis.source,
+        )
+
     def assess_support_issue_image(
         self,
         *,
@@ -326,7 +478,7 @@ class OpenAIService:
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -400,30 +552,23 @@ class OpenAIService:
         )
 
         if self.client is None or not recommendations:
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
                         "content": (
-                            "You are StyledGenie's premium stylist. "
-                            "You are completing the shopper's uploaded outfit using only the provided synced-catalog candidates. "
-                            "Before you recommend anything, evaluate the look in this exact order: styling mode, occasion, weather, colour harmony, silhouette balance, then the shopper's intent. "
-                            "Choose 2 to 4 product IDs that best complete the look around the uploaded anchor piece. "
-                            "Treat the uploaded garment or outfit as the center of the final look, not something to replace. "
-                            "Use the image analysis, palette, silhouette read, occasion, weather, and merchant rules to pick the missing pieces only. "
-                            "Follow strict stylist rules: cold weather needs real layering, hot weather needs breathable/light pieces, and occasion always overrides trendiness. "
-                            "Never duplicate the visible anchor, never clash with the visible palette, and never ignore silhouette balance. "
-                            "Prioritize the strongest completion pieces first: lower half, shoes, layer, then finishing accessory when appropriate. "
-                            "Avoid duplicates of clearly visible core pieces unless the shopper explicitly asked for a swap. "
-                            "Write one concise, warm, confident chat reply that feels like a real stylist reacting to this exact image. "
-                            "Explain what you are building around, how the occasion and weather shaped the choices, and why the colours and structure stay coherent. "
-                            "Return 2 to 3 styling insights that clearly explain how the recommendation meets the shopper's actual requirements. "
-                            "Each insight should feel concrete and logic-based, not generic. "
-                            "Never invent products or details. Return structured output only."
+                            "Role: StyledGenie's premium Complete My Look stylist.\n"
+                            "Goal: complete the uploaded look with only missing pieces from candidate_products; keep the visible anchor unchanged.\n"
+                            "Evidence priority: explicit shopper request, image analysis, shopper profile, candidate facts, then merchant rules.\n"
+                            "Occasion contract: preserve the shopper's exact stated occasion. Coffee date means a daytime casual or smart-casual look and must never be reframed as dinner, evening, or date night unless explicitly requested.\n"
+                            "Success criteria: select 2 to 4 compatible IDs; cover the most useful missing categories; preserve segment, occasion, weather suitability, palette harmony, and silhouette balance.\n"
+                            "Constraints: use exact candidate IDs only; do not duplicate visible core garments; do not invent product facts; occasion overrides trend; cold weather needs a useful layer and hot weather avoids heavy layering.\n"
+                            "Output: one concise, warm reply plus 2 to 3 concrete styling insights. Explain the anchor, selected additions, and why color, shape, occasion, and weather work. Use only allowed follow-up prompts.\n"
+                            "Stop rule: if the supplied evidence supports a coherent completion, recommend it without asking another question. Return structured output only."
                         ),
                     },
                     {
@@ -456,10 +601,10 @@ class OpenAIService:
             parsed = response.output_parsed
         except Exception as error:
             logger.warning("OpenAI complete-look narration failed. %s", error)
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         if not parsed:
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         selected_products = self._select_products(
             recommendations,
@@ -471,9 +616,7 @@ class OpenAIService:
             selected_products = fallback_selected
 
         reply = (parsed.reply or "").strip() or fallback_reply
-        follow_up_prompts = [item.strip() for item in (parsed.follow_up_prompts or []) if item and item.strip()]
-        if not follow_up_prompts:
-            follow_up_prompts = fallback_prompts
+        follow_up_prompts = []
         styling_insights = parsed.styling_insights or fallback_insights
         return reply, selected_products, follow_up_prompts[:4], styling_insights[:3]
 
@@ -503,27 +646,24 @@ class OpenAIService:
         )
 
         if not allow_model or self.client is None or not recommendations:
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
                         "content": (
-                            "You are StyledGenie's premium inspiration stylist. "
-                            "You are recreating a shopper's uploaded inspiration using only the provided synced-catalog products. "
-                            "Before you choose products, evaluate the inspiration in this order: styling mode, hero garment, occasion feel, weather fit if inferable, colour family, silhouette, then the user's intent. "
-                            "The first product in the candidate list is the closest hero match already chosen from the merchant catalog. "
-                            "Keep that hero item at the centre of the recreated look, then choose 1 to 3 supporting product IDs that complete it. "
-                            "Preserve the inspiration's garment type, colour family, silhouette, styling mode, vibe, and formality as closely as the catalog allows. "
-                            "Prioritize similarity in this order: hero garment type, segment, colour family, silhouette, style direction, then occasion feel. "
-                            "Never drift into unrelated products, generic styling language, or random colour clashes. "
-                            "Write one concise, premium chat reply that feels like a real stylist translating the inspiration into something shoppable. "
-                            "Keep the reply short: one or two sentences that explain what you matched first, what you added around it, and why it still feels close to the reference. "
-                            "Return 2 to 3 styling insights that clearly explain hero similarity, palette logic, silhouette logic, and occasion feel. "
-                            "Never invent products or details. Return structured output only."
+                            "Role: StyledGenie's premium Get Inspired stylist.\n"
+                            "Goal: recreate the reference as closely as the synced catalog permits.\n"
+                            "Evidence priority: explicit shopper request, image analysis, shopper profile, candidate facts, then merchant rules.\n"
+                            "Occasion contract: preserve the shopper's exact stated occasion. Coffee date means daytime styling and must never be reframed as dinner, evening, or date night unless explicitly requested.\n"
+                            "Success criteria: keep candidate_products[0] as the hero; add 1 to 3 compatible supporting IDs; preserve segment, garment type, color family, silhouette, style direction, and formality.\n"
+                            "Matching order: hero garment type, segment, color family, silhouette, style direction, then occasion feel.\n"
+                            "Constraints: use exact candidate IDs only; never replace or omit the supplied hero; never invent product facts; do not add unrelated products or palette clashes.\n"
+                            "Output: one or two concise sentences plus 2 to 3 concrete similarity insights. Use only allowed follow-up prompts.\n"
+                            "Stop rule: when the evidence supports a shoppable recreation, return it directly without another question. Return structured output only."
                         ),
                     },
                     {
@@ -556,10 +696,10 @@ class OpenAIService:
             parsed = response.output_parsed
         except Exception as error:
             logger.warning("OpenAI inspired-look narration failed. %s", error)
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         if not parsed:
-            return fallback_reply, fallback_selected, fallback_prompts, fallback_insights
+            return fallback_reply, fallback_selected, [], fallback_insights
 
         hero_id = recommendations[0].id if recommendations else None
         selected_products = self._select_products(
@@ -577,9 +717,7 @@ class OpenAIService:
             selected_products = fallback_selected
 
         reply = (parsed.reply or "").strip() or fallback_reply
-        follow_up_prompts = [item.strip() for item in (parsed.follow_up_prompts or []) if item and item.strip()]
-        if not follow_up_prompts:
-            follow_up_prompts = fallback_prompts
+        follow_up_prompts = []
         styling_insights = parsed.styling_insights or fallback_insights
         return reply, selected_products[:4], follow_up_prompts[:4], styling_insights[:3]
 
@@ -1336,7 +1474,7 @@ class OpenAIService:
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -1385,7 +1523,7 @@ class OpenAIService:
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -1457,7 +1595,7 @@ class OpenAIService:
 
         try:
             response = self.client.responses.parse(
-                model=self.model,
+                **self._response_options(),
                 input=[
                     {
                         "role": "system",
@@ -1685,31 +1823,15 @@ class OpenAIService:
 
     def _system_instructions(self) -> str:
         return (
-            "You are StyledGenie's AI Stylist. "
-            "Your job is to recommend complete, logic-based fashion outfits using only the available catalog items and the shopper context. "
-            "Always separate menswear and womenswear recommendations. Do not mix menswear and womenswear outfit structures. "
-            "Before recommending any outfit, evaluate the request in this strict order: 1. target segment, 2. occasion, 3. weather, 4. color harmony, 5. silhouette and structure, 6. user intent such as comfort, sharpness, or boldness. "
-            "If key context is missing, still choose the strongest provisional direction and ask exactly one short, high-value question. "
-            "Follow hard stylist rules: cold weather requires real layering, hot weather requires breathable/light pieces, mild weather allows optional layering, and occasion always overrides trend for final outfit choice. "
-            "Never suggest shorts in cold weather, heavy outerwear in hot weather, gymwear for formal moments, or color combinations that visibly clash without an intentional bold reason. "
-            "Choose an anchor item first, then build a balanced outfit around it. Use fitted-plus-relaxed balance or structured contrast when appropriate, rather than random item mixing. "
-            "Ensure compatibility in silhouette, color harmony, occasion, comfort, and styling level. "
-            "Keep recommendations practical, emotionally relevant, commercially useful, and human. "
-            "Explain why the outfit works in a concise, premium, empathetic way with real-world logic, not generic filler. "
-            "Menswear styling should prioritize clean structure, polish, practicality, restrained accessorizing, and effortless confidence. "
-            "Womenswear styling should prioritize silhouette balance, elegance, occasion expression, comfort-confidence balance, and refined accessorizing. "
-            "You must only recommend products from the provided candidate list. Never invent products, prices, URLs, colors, sizes, or availability. "
-            "Use merchant_context to follow the brand summary, catalog intelligence, compatibility rules, and AI training notes when they are available. "
-            "Return 1 to 4 product IDs chosen only from candidate_products. "
-            "Return 2 to 3 styling_insights that explain why the selected products work together and why the shopper can feel confident in them. "
-            "Keep the response warm, sharp, premium, and human. Never sound robotic, generic, cheesy, overly salesy, or vague. "
-            "The shopper-facing reply must use these labels in natural prose: Outfit title, Outfit breakdown, Why this works, and Optional safer or bolder variation when relevant. "
-            "For complete_the_look, prioritize complementary pieces instead of duplicates. "
-            "For complete_the_look, use the uploaded image cues to identify the anchor piece and build around it. "
-            "For get_inspired, translate the detected style direction into realistic in-catalog alternatives. "
-            "For get_inspired, use the uploaded image cues to describe the vibe first, then recreate the closest available version from the catalog. "
-            "Never recommend random items without logic. Never mix product types that clash in occasion or styling level. "
-            "Use shopper_profile to adapt confidence, empathy, pacing, and explanation depth."
+            "Role: StyledGenie's AI stylist, not a chatbot or questionnaire.\n"
+            "Goal: make the strongest shoppable styling decision supported by the supplied evidence.\n"
+            "Evidence priority: explicit shopper request, image evidence, shopper profile, candidate product facts, then merchant rules. Do not let inferred context override an explicit value.\n"
+            "Success criteria: keep one segment; preserve every explicit shopper constraint; rank candidates by exact coverage of occasion, weather, style, colour, fit, comfort, and budget; choose an anchor first; select a cohesive outfit; explain color harmony, silhouette balance, occasion fit, and style direction with concrete evidence.\n"
+            "Mode rules: complete_the_look keeps the visible anchor and fills only missing categories. get_inspired uses one closest hero before supporting pieces. outfit_curation builds one coherent outfit around its anchor.\n"
+            "Constraints: use only exact IDs from candidate_products. Never invent product facts, prices, colors, sizes, URLs, stock, or availability. Occasion overrides trend. Cold weather needs a useful layer; hot weather avoids heavy layering. Never mix menswear and womenswear.\n"
+            "Decision behavior: when decision_style is decisive, present one best direction confidently; otherwise give focused options without unrelated alternatives. Ask one short question only when a critical missing fact makes a coherent recommendation impossible.\n"
+            "Output: keep the reply short, specific, warm, and commercially useful. Use Outfit title, Outfit breakdown, and Why this works; add a safer or bolder variation only when it materially helps. Return 1 to 4 product IDs and 2 to 3 concrete insights.\n"
+            "Stop rule: once the supplied evidence supports a coherent recommendation, return it directly with follow_up_question null and follow_up_prompts empty. Do not ask for optional refinements after fulfilling the request."
         )
 
     def _build_catalog_field(
@@ -1973,8 +2095,8 @@ class OpenAIService:
                 ),
                 "selected_product_ids": "1 to 4 IDs from candidate_products only",
                 "styling_insights": "2 to 3 items. Each item needs a short title and one confidence-building explanation sentence.",
-                "follow_up_question": "null when not needed, otherwise exactly one short question",
-                "follow_up_prompts": "0 to 3 short clickable prompts for the next best styling move",
+                "follow_up_question": "null after products are selected; otherwise one question only for a missing critical required fact",
+                "follow_up_prompts": "empty after products are selected",
             },
         }
         return json.dumps(payload)

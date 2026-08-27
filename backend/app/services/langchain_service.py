@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -40,7 +41,10 @@ class SupportIntentDecision(BaseModel):
 class ProfileEnrichment(BaseModel):
     style_identity: list[str] = Field(default_factory=list)
     emotional_context: list[str] = Field(default_factory=list)
-    occasion_context: Optional[str] = None
+    occasion_context: Optional[str] = Field(
+        default=None,
+        description="Exact shopper-stated occasion; preserve specific phrases such as coffee date without relabeling them.",
+    )
     confidence_level: Optional[str] = None
     decision_style: Optional[str] = None
     experimentation_preference: Optional[str] = None
@@ -52,11 +56,23 @@ class ProfileEnrichment(BaseModel):
 
 
 class LangChainStylistPlan(BaseModel):
-    reply: str
-    selected_product_ids: list[str] = Field(default_factory=list)
-    styling_insights: list[StylingInsight] = Field(default_factory=list)
-    follow_up_question: Optional[str] = None
-    follow_up_prompts: list[str] = Field(default_factory=list)
+    reply: str = Field(description="Concise shopper-facing recommendation grounded only in supplied evidence.")
+    selected_product_ids: list[str] = Field(
+        default_factory=list,
+        description="One to three exact IDs copied from candidate_products, ordered anchor first.",
+    )
+    styling_insights: list[StylingInsight] = Field(
+        default_factory=list,
+        description="Two or three concrete reasons covering color, silhouette, occasion, or style direction.",
+    )
+    follow_up_question: Optional[str] = Field(
+        default=None,
+        description="One critical question only when a coherent outfit is otherwise impossible; else null.",
+    )
+    follow_up_prompts: list[str] = Field(
+        default_factory=list,
+        description="Up to three short, actionable next-step prompts.",
+    )
 
 
 class LangChainSupportPlan(BaseModel):
@@ -209,6 +225,7 @@ class LangChainService:
         customer_care_settings: CustomerCareSettings,
         fallback_answer: str,
         merchant_context: dict,
+        support_intent: str = "support_question",
     ) -> Optional[tuple[str, list[str]]]:
         llm = self._get_llm()
         if not llm or not ChatPromptTemplate or not RunnableLambda:
@@ -224,11 +241,15 @@ class LangChainService:
                     "Do not dump long policy paragraphs. "
                     "Use at most two short sentences and ask only one question at a time when you need input. "
                     "Use factual context already provided to you rather than inventing policy details. "
+                    "For order tracking, use only the supplied Shopify result and never invent a status, date, carrier, or tracking link. "
+                    "For FAQ answers, answer from the supplied merchant policy or fallback answer only. "
+                    "For human handoff, accurately describe the created support request; never claim an agent joined the live chat. "
                     "If escalation is appropriate, mention the merchant support email. "
                     "Return structured output only.",
                 ),
                 (
                     "human",
+                    "Support intent: {support_intent}\n"
                     "Shopper message: {shopper_message}\n"
                     "Fallback support answer: {fallback_answer}\n"
                     "Customer care settings: {customer_care_settings_json}\n"
@@ -254,6 +275,7 @@ class LangChainService:
             plan = chain.invoke(
                 {
                     "shopper_message": shopper_message,
+                    "support_intent": support_intent,
                     "fallback_answer": fallback_answer,
                     "customer_care_settings_json": customer_care_settings.model_dump_json(),
                     "merchant_context_json": json.dumps(merchant_context),
@@ -385,6 +407,7 @@ class LangChainService:
                     "system",
                     "You enrich a shopper styling profile for a fashion commerce assistant. "
                     "Improve nuance, but stay grounded in the actual evidence. "
+                    "Preserve an explicit shopper occasion exactly; coffee date is daytime and must not become dinner, evening, or date night. "
                     "Do not invent personal details. "
                     "Return only fields that strengthen tone, confidence handling, style framing, or practical constraints.",
                 ),
@@ -614,26 +637,20 @@ class LangChainService:
             [
                 (
                     "system",
-                    "You are StyledGenie's AI Stylist. "
-                    "Recommend complete, logic-based outfits using only the available candidate_products and shopper context. "
-                    "Always separate menswear and womenswear recommendations, and never mix those outfit structures. "
-                    "Evaluate the styling logic in this order: target segment, occasion, weather, colour harmony, silhouette and structure, then the shopper's intent. "
-                    "Identify the target segment first, choose an anchor item first, then build a balanced outfit around it. "
-                    "Ensure compatibility in silhouette, color harmony, occasion, weather, comfort, and styling level. "
-                    "Cold weather needs real layering. Hot weather needs breathable/light pieces. Occasion must stay appropriate and overrule random trend choices. "
-                    "Never recommend combinations that clash in colour, structure, or formality. "
-                    "Keep recommendations practical, emotionally relevant, premium, and concise. "
-                    "Menswear styling should prioritize clean structure, polish, practicality, restrained accessorizing, and effortless confidence. "
-                    "Womenswear styling should prioritize silhouette balance, elegance, occasion expression, comfort-confidence balance, and refined accessorizing. "
-                    "Only recommend products from candidate_products. Never invent products or details. "
-                    "Use merchant_context, tool_context, and shopper_profile to decide tone and product choice. "
-                    "The reply must use these labels in natural prose: Outfit title, Outfit breakdown, Why this works, and Optional safer or bolder variation when relevant. "
-                    "Return structured output only.",
+                    "Role: StyledGenie's AI stylist, not a questionnaire.\n"
+                    "Goal: make the strongest shoppable outfit decision supported by the supplied evidence.\n"
+                    "Evidence priority: explicit shopper request, vision evidence, shopper profile, candidate facts, merchant context, then tool context. Never override an explicit value with an inference.\n"
+                    "The Authoritative occasion field is immutable when present: use its exact meaning in the reply and insights. Coffee date requires daytime casual or smart-casual framing, never dinner/evening framing unless the shopper explicitly asks for that.\n"
+                    "Success criteria: keep the target segment; preserve every explicit constraint; rank candidates by exact coverage of occasion, weather, style, colour, fit, comfort, and budget; choose an anchor first; select a cohesive outfit with color harmony, silhouette balance, comfort, and consistent formality.\n"
+                    "Constraints: use exact candidate IDs only; never invent product details; never mix menswear and womenswear; occasion overrides trend; cold weather needs a useful layer and hot weather avoids heavy layering.\n"
+                    "Output: concise premium reply using Outfit title, Outfit breakdown, and Why this works. Add a safer or bolder variation only when useful. Return 1 to 3 IDs and 2 to 3 concrete insights.\n"
+                    "Stop rule: ask one short question only if a critical required fact makes a coherent outfit impossible. Once products are selected, set follow_up_question to null and follow_up_prompts to an empty list; do not ask for optional refinements after fulfilling the request. Return structured output only.",
                 ),
                 (
                     "human",
                     "Mode: {mode}\n"
                     "Target segment: {target_segment}\n"
+                    "Authoritative occasion: {authoritative_occasion}\n"
                     "Shopper message: {shopper_message}\n"
                     "Vision summary: {vision_summary}\n"
                     "Detected tags: {detected_tags_json}\n"
@@ -663,6 +680,7 @@ class LangChainService:
                 {
                     "mode": mode,
                     "target_segment": target_segment,
+                    "authoritative_occasion": shopper_profile.occasion_context or "",
                     "shopper_message": shopper_message,
                     "detected_tags_json": json.dumps(detected_tags),
                     "shopper_profile_json": shopper_profile.model_dump_json(),
@@ -703,16 +721,26 @@ class LangChainService:
         if not selected_products:
             selected_products = segmented_candidates[:3]
 
-        follow_up_prompts = [item.strip() for item in plan.follow_up_prompts if item and item.strip()]
-        if not follow_up_prompts:
-            follow_up_prompts = fallback_follow_up_prompts
+        follow_up_prompts = []
 
         reply = (plan.reply or "").strip()
-        if plan.follow_up_question:
+        if plan.follow_up_question and not selected_products:
             reply = f"{reply} {plan.follow_up_question.strip()}".strip()
 
         if not reply:
             return None
+
+        authoritative_occasion = (shopper_profile.occasion_context or "").strip().lower()
+        if authoritative_occasion == "coffee date":
+            occasion_copy = " ".join(
+                [reply]
+                + [insight.detail for insight in (plan.styling_insights or []) if insight.detail]
+            ).lower()
+            if re.search(r"\b(dinner|evening|date night)\b", occasion_copy):
+                logger.warning(
+                    "Rejected stylist plan that changed authoritative occasion coffee date to evening styling."
+                )
+                return None
 
         return reply, selected_products, (plan.styling_insights or [])[:3], follow_up_prompts[:3]
 
@@ -727,9 +755,9 @@ class LangChainService:
             self._llm = ChatOpenAI(
                 model=settings.openai_model,
                 api_key=settings.openai_api_key,
-                temperature=0.55,
                 timeout=self.request_timeout_seconds,
                 max_retries=1,
+                reasoning_effort=settings.openai_reasoning_effort,
             )
         except Exception as error:
             logger.warning("LangChain ChatOpenAI initialization failed. %s", error)
@@ -886,12 +914,19 @@ class LangChainService:
                 deduped.append(normalized)
             return deduped
 
+        base_occasion = base.occasion_context
+        occasion_context = (
+            enrichment.occasion_context
+            if base_occasion in {None, "", "inspiration", "look_completion"}
+            else base_occasion
+        )
+
         return ShopperProfile(
             segment_preference=base.segment_preference,
             style_identity=merge_lists(base.style_identity, enrichment.style_identity),
             shopping_intent=base.shopping_intent,
             emotional_context=merge_lists(base.emotional_context, enrichment.emotional_context),
-            occasion_context=enrichment.occasion_context or base.occasion_context,
+            occasion_context=occasion_context,
             weather_context=base.weather_context,
             budget_context=base.budget_context,
             confidence_level=enrichment.confidence_level or base.confidence_level,

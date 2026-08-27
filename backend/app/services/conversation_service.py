@@ -5,7 +5,7 @@ from time import perf_counter
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from app.models.schemas import AIRuntimeMetadata, ChatRequest, ChatResponse, CustomerCareSettings, ImageRequest, ProductRecommendation, RecommendationRefineRequest, ShopperProfileInput, StylingInsight, SupportAction, SupportContact, SupportLineItem, SupportPayload, SupportRequestRecord
+from app.models.schemas import AIRuntimeMetadata, ChatRequest, ChatResponse, CustomerCareSettings, ImageRequest, OnboardingScanAnalysisResponse, ProductRecommendation, RecommendationRefineRequest, ShopperProfileInput, StylingInsight, SupportAction, SupportContact, SupportLineItem, SupportPayload, SupportRequestRecord
 from app.services.faq_service import FAQService
 from app.services.langchain_service import LangChainService
 from app.services.notification_service import NotificationService
@@ -212,6 +212,7 @@ class ConversationService:
                 required_segment=required_segment,
                 limit=4,
                 exclude_product_ids=payload.exclude_product_ids,
+                query_text=payload.message,
             )
         fallback_prompts = self.profile_service.build_follow_up_prompts(shopper_profile, resolved_mode)
 
@@ -264,7 +265,7 @@ class ConversationService:
                 recommendations=recommendations,
                 shopper_profile=shopper_profile,
             )
-            follow_up_prompts = fallback_prompts
+            follow_up_prompts = []
 
         validation_result = self.recommendation_service.validate_generated_recommendations(
             mode=resolved_mode,
@@ -303,6 +304,7 @@ class ConversationService:
                     required_segment=required_segment,
                     limit=4,
                     exclude_product_ids=(payload.exclude_product_ids or []) + validation_result.invalid_product_ids,
+                    query_text=payload.message,
                 )
             rerun_recommendations = rerun_products[:4]
             rerun_validation = self.recommendation_service.validate_generated_recommendations(
@@ -361,6 +363,20 @@ class ConversationService:
                     langchain_route_used=self.langchain_service.is_enabled(),
                     langchain_stylist_used=langchain_stylist_used,
                 ),
+        )
+
+    def analyze_onboarding_scan(self, payload: ImageRequest) -> OnboardingScanAnalysisResponse:
+        image_reference = payload.image_url or payload.image_name
+        vision_analysis = self.vision_service.analyze_image(
+            image_reference=image_reference,
+            image_content_base64=payload.image_content_base64,
+            image_mime_type=payload.image_mime_type,
+        )
+        return self.openai_service.analyze_onboarding_scan(
+            image_content_base64=payload.image_content_base64,
+            image_url=payload.image_url,
+            image_mime_type=payload.image_mime_type,
+            vision_analysis=vision_analysis,
         )
 
     def handle_image_chat(self, payload: ImageRequest, mode: str) -> ChatResponse:
@@ -546,6 +562,7 @@ class ConversationService:
                 candidate_products = self.recommendation_service.fallback_segment_products(
                     required_segment=required_segment,
                     limit=4,
+                    query_text=query_context or shopper_message,
                 )
             reply, recommendations, follow_up_prompts, styling_insights = self.openai_service.compose_complete_look_reply(
                 shopper_message=shopper_message,
@@ -597,6 +614,7 @@ class ConversationService:
                 candidate_products = self.recommendation_service.fallback_segment_products(
                     required_segment=required_segment,
                     limit=4,
+                    query_text=query_context or shopper_message,
                 )
 
             langchain_result = self.langchain_service.style_recommendations(
@@ -666,7 +684,7 @@ class ConversationService:
                     recommendations=recommendations,
                     shopper_profile=shopper_profile,
                 )
-                follow_up_prompts = fallback_prompts
+                follow_up_prompts = []
 
         gap_analysis = None
         if mode == "complete_the_look":
@@ -1508,7 +1526,7 @@ class ConversationService:
             recommendations=recommendations,
             shopper_profile=shopper_profile,
         )
-        return reply, recommendations, styling_insights, fallback_prompts
+        return reply, recommendations, styling_insights, []
 
     def _handle_support_message(
         self,
@@ -1609,6 +1627,7 @@ class ConversationService:
             customer_care_settings=customer_care_settings,
             fallback_answer=fallback_answer,
             merchant_context=self.openai_service.merchant_context(),
+            support_intent=support_intent or "support_question",
         )
         if langchain_support is not None:
             reply, prompts = langchain_support
@@ -1835,10 +1854,17 @@ class ConversationService:
         vision_objects: Optional[list[str]] = None,
         vision_colors: Optional[list[str]] = None,
     ) -> ChatResponse:
-        fallback_reply = (
-            f"I’m keeping this strictly in {required_segment}, but I don’t have a strong enough same-category match yet. "
-            "Give me one more detail on the occasion, silhouette, or budget and I’ll tighten it up without crossing categories."
-        )
+        budget_cap = self.recommendation_service._parse_budget_cap(shopper_message)
+        if budget_cap is not None:
+            fallback_reply = (
+                f"I couldn’t find enough in-stock {required_segment} products within your €{budget_cap:g} limit. "
+                "I won’t show higher-priced alternatives unless you ask me to widen the budget."
+            )
+        else:
+            fallback_reply = (
+                f"I couldn’t find an in-stock {required_segment} catalog match that satisfies all of those details. "
+                "I’ve stopped here instead of showing an inaccurate outfit."
+            )
         reply = self._compose_image_analysis_reply(image_analysis, fallback_reply)
         return ChatResponse(
             reply=reply,
@@ -1846,7 +1872,7 @@ class ConversationService:
             styling_insights=[],
             image_analysis=image_analysis,
             shopper_profile=shopper_profile,
-            follow_up_prompts=fallback_prompts or ["Make it more polished", "Keep it casual", "Show same-mode best picks"],
+            follow_up_prompts=[],
             ai_runtime=self._build_runtime_metadata(
                 resolved_mode=resolved_mode,
                 route_reason=route_reason,
@@ -2136,6 +2162,26 @@ class ConversationService:
             reply = f"Your order {order_name} is currently {fulfillment_status.lower()}."
         if delivery_estimate:
             reply = f"{reply} {delivery_estimate}"
+
+        ai_reply = self.langchain_service.compose_support_reply(
+            shopper_message=message,
+            recent_messages=recent_messages,
+            customer_care_settings=customer_care_settings,
+            fallback_answer=reply,
+            merchant_context={
+                "verified_shopify_order": {
+                    "order_name": order_name,
+                    "fulfillment_status": fulfillment_status,
+                    "financial_status": self._format_support_status(order_details.get("financial_status")),
+                    "delivery_estimate": delivery_estimate,
+                    "source": source,
+                    "tracking_url": order_details.get("status_page_url"),
+                }
+            },
+            support_intent="order_tracking",
+        )
+        if ai_reply is not None:
+            reply = ai_reply[0]
 
         payload = SupportPayload(
             intent="order_tracking",
@@ -3012,6 +3058,25 @@ class ConversationService:
             shopper_email=shopper_email,
             order_reference=order_reference,
         )
+        ai_reply = self.langchain_service.compose_support_reply(
+            shopper_message=message,
+            recent_messages=recent_messages,
+            customer_care_settings=customer_care_settings,
+            fallback_answer=reply,
+            merchant_context={
+                "support_request": {
+                    "id": support_request.id,
+                    "status": support_request.status,
+                    "persisted": support_request.persisted,
+                    "notification_status": self._notification_status(notification_result),
+                    "order_reference": order_reference,
+                    "shopper_email": shopper_email,
+                }
+            },
+            support_intent="human_handoff",
+        )
+        if ai_reply is not None:
+            reply = ai_reply[0]
         prompts = []
         if not shopper_email:
             prompts.append("My email is ...")

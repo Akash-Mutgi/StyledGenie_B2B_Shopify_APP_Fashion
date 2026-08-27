@@ -56,6 +56,19 @@ class ImageRequest(BaseModel):
     profile_inputs: Optional[ShopperProfileInput] = None
 
 
+class OnboardingScanAnalysisResponse(BaseModel):
+    full_body_visible: bool = False
+    skin_tone_index: Optional[int] = Field(default=None, ge=0, le=5)
+    skin_tone_hex: Optional[str] = None
+    skin_tone_label: Optional[str] = None
+    body_shape: Optional[str] = None
+    body_shape_label: Optional[str] = None
+    confidence: str = "low"
+    quality_note: str = ""
+    message: str = ""
+    vision_source: str = "fallback"
+
+
 class FeedbackRequest(BaseModel):
     feedback_type: str = Field(min_length=1)
     mode: Optional[str] = None

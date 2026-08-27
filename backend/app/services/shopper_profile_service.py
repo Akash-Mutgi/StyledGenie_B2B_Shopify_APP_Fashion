@@ -16,11 +16,14 @@ class ShopperProfileService:
             "trend-aware": {"trend", "trendy", "editorial", "fashion-forward"},
         }
         self.occasion_keywords = {
+            "coffee date": {"coffee date", "cafe date", "café date", "coffee meetup"},
             "work": {"work", "office", "meeting", "client", "professional"},
-            "dinner": {"dinner", "date", "evening", "night out", "restaurant"},
+            "dinner": {"dinner", "date night", "evening", "night out", "restaurant"},
+            "date": {"date"},
             "event": {"wedding", "party", "event", "celebration", "guest"},
             "travel": {"travel", "airport", "holiday", "vacation"},
-            "weekend": {"weekend", "day out", "brunch", "errands"},
+            "brunch": {"brunch"},
+            "weekend": {"weekend", "day out", "errands"},
         }
         self.weather_keywords = {
             "warm": {"warm", "hot", "summer", "heat", "humid"},
@@ -315,7 +318,10 @@ class ShopperProfileService:
 
     def _detect_occasion(self, combined_text: str, mode: str) -> Optional[str]:
         for label, keywords in self.occasion_keywords.items():
-            if any(keyword in combined_text for keyword in keywords):
+            if any(
+                re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", combined_text)
+                for keyword in keywords
+            ):
                 return label
 
         if mode == "get_inspired":

@@ -1,7 +1,7 @@
 {% assign api_base_url = block.settings.api_base_url | default: 'http://127.0.0.1:8000' %}
 
-<link rel="stylesheet" href="{{ 'chat-widget.css' | asset_url }}?v=20260703-avatar">
-<link rel="preload" href="{{ 'chat-widget.js' | asset_url }}?v=20260703-avatar" as="script">
+<link rel="stylesheet" href="{{ 'chat-widget.css' | asset_url }}?v=20260814-purchases">
+{{ 'chat-widget.js' | asset_url | preload_tag: as: 'script' }}
 
 <div
   id="styledgenie-chat-root"
@@ -12,9 +12,26 @@
   data-customer-name="{% if customer %}{{ customer.first_name | append: ' ' | append: customer.last_name | strip | escape }}{% endif %}"
   data-customer-email="{% if customer %}{{ customer.email | escape }}{% endif %}"
   data-customer-avatar=""
-></div>
+>
+  <div hidden aria-hidden="true">
+    {% if customer %}
+      {% for order in customer.orders limit: 5 %}
+        {% for line_item in order.line_items %}
+          <span
+            data-styledgenie-purchase
+            data-title="{{ line_item.title | escape }}"
+            data-image-url="{% if line_item.image %}{{ line_item.image | image_url: width: 180 | escape }}{% endif %}"
+            data-purchased-at="{{ order.created_at | date: '%d %B, %Y' | escape }}"
+            data-variant-title="{{ line_item.variant.title | escape }}"
+            data-price="{{ line_item.final_line_price | money_with_currency | escape }}"
+          ></span>
+        {% endfor %}
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
 
-<script src="{{ 'chat-widget.js' | asset_url }}?v=20260703-avatar"></script>
+<script src="{{ 'chat-widget.js' | asset_url }}?v=20260814-options-fix" defer></script>
 
 {% schema %}
 {

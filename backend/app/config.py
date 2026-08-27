@@ -15,6 +15,11 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    value = (os.getenv(name) or default).strip().lower()
+    return value if value in allowed else default
+
+
 @dataclass
 class Settings:
     app_name: str = "StyledGenie API"
@@ -22,7 +27,18 @@ class Settings:
     api_prefix: str = "/api"
     shopify_api_version: str = os.getenv("SHOPIFY_API_VERSION", "2026-01")
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
+    openai_timeout_seconds: float = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30"))
+    openai_reasoning_effort: str = _env_choice(
+        "OPENAI_REASONING_EFFORT",
+        "low",
+        {"none", "low", "medium", "high", "xhigh", "max"},
+    )
+    openai_text_verbosity: str = _env_choice(
+        "OPENAI_TEXT_VERBOSITY",
+        "low",
+        {"low", "medium", "high"},
+    )
     supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
     supabase_anon_key: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
     supabase_service_role_key: Optional[str] = os.getenv("SUPABASE_SERVICE_ROLE_KEY")

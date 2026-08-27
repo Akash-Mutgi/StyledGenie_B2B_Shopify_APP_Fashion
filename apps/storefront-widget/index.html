@@ -4,13 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StyledGenie Chatbot</title>
-    <link rel="stylesheet" href="./styles.css?v=20260703-avatar-replace" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2215%22 fill=%22%23b450ff%22/><circle cx=%2211%22 cy=%2216%22 r=%225%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222%22/><circle cx=%2221%22 cy=%2216%22 r=%225%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222%22/></svg>" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-swap-apply" />
   </head>
   <body>
     <main class="chat-demo-shell">
       <section class="chat-stage" aria-label="Storefront chat preview">
         <section class="widget-panel">
           <header class="widget-header">
+            <div class="widget-status-bar" aria-hidden="true">
+              <span class="widget-status-time">9:41</span>
+              <span class="widget-status-icons">
+                <i class="status-signal">▮▮▮</i>
+                <i class="status-wifi">⌁</i>
+                <i class="status-battery"><b></b></i>
+              </span>
+            </div>
             <button
               id="widgetNavButton"
               class="widget-nav-button"
@@ -78,6 +87,15 @@
             </div>
           </header>
 
+          <section id="widgetCartScreen" class="widget-cart-screen hidden" aria-label="Shopping cart">
+            <header class="widget-cart-screen-header">
+              <button id="widgetCartCloseButton" class="widget-cart-close-button" type="button" aria-label="Close cart">&#8249;</button>
+              <h2>Your cart</h2>
+              <span id="widgetCartCount" class="widget-cart-count" aria-live="polite"></span>
+            </header>
+            <div id="widgetCartBody" class="widget-cart-body"></div>
+          </section>
+
           <section id="authScreen" class="auth-screen hidden" aria-label="Customer login">
             <div id="authBody" class="auth-body"></div>
           </section>
@@ -132,7 +150,7 @@
               <input
                 id="chatInput"
                 type="text"
-                placeholder="+ Type something....."
+                placeholder="Type something....."
               />
               <div class="composer-toolbar">
                 <div class="composer-badges hidden" aria-hidden="true">
@@ -189,6 +207,10 @@
 
           <div id="cameraCard" class="camera-screen hidden" aria-live="polite">
             <div class="camera-screen-body">
+              <div class="camera-screen-copy">
+                <strong id="cameraTitle">Scan your piece</strong>
+                <span id="cameraHint">Make sure to make it visible</span>
+              </div>
               <div class="camera-frame">
                 <div class="camera-viewfinder" aria-hidden="true">
                   <span class="camera-corner camera-corner-tl"></span>
@@ -202,6 +224,10 @@
               </div>
               <div class="camera-control-row">
                 <button id="capturePhotoButton" class="camera-shutter-button" type="button" aria-label="Capture photo"></button>
+                <div id="cameraFallbackActions" class="camera-fallback-actions hidden">
+                  <button id="cameraFallbackTakePhoto" class="upload-action-button primary" type="button">Take photo</button>
+                  <button id="cameraFallbackChooseGallery" class="upload-action-button" type="button">Choose from gallery</button>
+                </div>
                 <button id="retakePhotoButton" class="upload-action-button hidden" type="button">Retake</button>
                 <button id="confirmPhotoButton" class="upload-action-button primary hidden" type="button">Use Photo</button>
               </div>
@@ -211,6 +237,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260703-avatar-replace"></script>
+    <script src="./app.js?v=20260827-female-swap"></script>
   </body>
 </html>
