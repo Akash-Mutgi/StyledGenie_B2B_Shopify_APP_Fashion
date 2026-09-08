@@ -1,0 +1,24 @@
+.git
+.gitignore
+.dockerignore
+
+.env
+.env.*
+!.env.example
+
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+node_modules
+dist
+build
+
+.DS_Store
+*.log
+uvicorn.out.log
+
+Claude Docs/

@@ -1,0 +1,41 @@
+INFO:     127.0.0.1:50448 - "GET /storefront-widget-demo/ HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:50448 - "GET /storefront-widget-demo/index.html?login=1 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:50448 - "GET /storefront-widget-demo/styles.css?v=20260812-figma-hifi-v9 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:60994 - "GET /storefront-widget-demo/app.js?v=20260812-figma-hifi-v12 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:50448 - "GET /storefront-widget-demo/assets/fonts/poppins-600.ttf HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:55214 - "GET /storefront-widget-demo/assets/fonts/poppins-500.ttf HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:62827 - "GET /storefront-widget-demo/assets/fonts/poppins-400.ttf HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:56402 - "GET /storefront-widget-demo/assets/fonts/poppins-800.ttf HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:56402 - "GET /merchant-dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62827 - "GET /merchant-dashboard/chart.min.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56402 - "GET /merchant-dashboard/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55214 - "GET /merchant-dashboard/app.js?v=20260629-inventory-sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62827 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60994 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60994 - "GET /storefront-widget-demo/assets/fonts/poppins-700.ttf HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:60994 - "GET /storefront-widget-demo/assets/geniebot-avatar.png HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:62827 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62827 - "GET /api/catalog/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62827 - "GET /api/merchant/shopify-capabilities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59692 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59692 - "GET /storefront-widget-demo/ HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:59692 - "GET /storefront-widget-demo/index.html?login=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59692 - "GET /merchant-dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54104 - "GET /api/catalog/products?limit=250 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58381 - "GET /merchant-dashboard/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:58381 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58381 - "GET /api/catalog/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58381 - "GET /api/merchant/shopify-capabilities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58381 - "GET /storefront-widget-demo/index.html?login=1 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:58381 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54868 - "GET /api/catalog/products?limit=250 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53901 - "GET /api/catalog/products?limit=250 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58567 - "GET /api/merchant/overview HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50890 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50890 - "POST /api/catalog/import HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:62354 - "POST /api/catalog/import HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:62358 - "POST /api/catalog/import HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63314 - "GET /storefront-widget-demo/index.html?login=1 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63971 - "GET /storefront-widget-demo/index.html?login=1 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63971 - "GET /api/merchant/workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56874 - "GET /api/catalog/products?limit=250 HTTP/1.1" 200 OK

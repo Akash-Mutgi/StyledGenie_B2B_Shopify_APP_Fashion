@@ -1,0 +1,6 @@
+supabase==2.15.0
+openai>=2.44.0,<3
+google-cloud-vision==3.10.2
+langchain==0.3.28
+langchain-openai==0.3.35
+langflow==0.6.19
