@@ -120,6 +120,7 @@ class ShopperProfileService:
         budget_context = self._normalize_choice(profile_inputs.budget) if profile_inputs and profile_inputs.budget else self._detect_budget_context(combined_text)
         color_preferences = self._normalize_preferences(profile_inputs.color_preference if profile_inputs else None)
         fit_preferences = self._normalize_preferences(profile_inputs.fit_preference if profile_inputs else None)
+        body_shape = self._normalize_body_shape(profile_inputs.body_shape if profile_inputs else None)
         priority_focus = self._normalize_choice(profile_inputs.priority) if profile_inputs and profile_inputs.priority else None
         feeling_goal = self._normalize_choice(profile_inputs.feel) if profile_inputs and profile_inputs.feel else None
 
@@ -168,6 +169,7 @@ class ShopperProfileService:
             feeling_goal=feeling_goal,
             color_preferences=color_preferences,
             fit_preferences=fit_preferences,
+            body_shape=body_shape,
         )
 
         return ShopperProfile(
@@ -186,6 +188,7 @@ class ShopperProfileService:
             image_signals=image_signals,
             color_preferences=color_preferences,
             fit_preferences=fit_preferences,
+            body_shape=body_shape,
             priority_focus=priority_focus,
             feeling_goal=feeling_goal,
             focus_points=focus_points,
@@ -404,10 +407,28 @@ class ShopperProfileService:
             profile_inputs.feel,
             profile_inputs.color_preference,
             profile_inputs.fit_preference,
+            profile_inputs.body_shape,
         ]:
             if value and str(value).strip():
                 values.append(str(value).strip())
         return values
+
+    def _normalize_body_shape(self, value: Optional[str]) -> Optional[str]:
+        normalized = self._normalize_choice(value)
+        aliases = {
+            "inverted triangle": "inverted",
+            "inverted_triangle": "inverted",
+            "male inverted": "male-inverted",
+            "male rectangle": "male-rectangle",
+            "male triangle": "male-triangle",
+            "male oval": "male-oval",
+        }
+        normalized = aliases.get(normalized or "", normalized)
+        allowed = {
+            "rectangle", "pear", "hourglass", "inverted", "apple", "diamond",
+            "trapezoid", "male-inverted", "male-rectangle", "male-triangle", "male-oval",
+        }
+        return normalized if normalized in allowed else None
 
     def _normalize_segment(self, value: Optional[str]) -> Optional[str]:
         normalized = self._normalize_choice(value)
@@ -482,6 +503,7 @@ class ShopperProfileService:
         feeling_goal: Optional[str],
         color_preferences: list[str],
         fit_preferences: list[str],
+        body_shape: Optional[str],
     ) -> list[str]:
         candidates = []
         if segment_preference:
@@ -498,6 +520,8 @@ class ShopperProfileService:
         candidates.extend(image_signals[:1])
         candidates.extend(color_preferences[:1])
         candidates.extend(fit_preferences[:1])
+        if body_shape:
+            candidates.append(f"{body_shape.replace('-', ' ')} shape")
         if feeling_goal:
             candidates.append(f"feel {feeling_goal}")
         if "needs_reassurance" in emotional_context:

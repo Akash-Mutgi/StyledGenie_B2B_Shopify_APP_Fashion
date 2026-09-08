@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -364,6 +365,66 @@ class SupabaseService:
                 normalized[label] = [str(values).strip()]
         return normalized
 
+    @staticmethod
+    def _explicit_catalog_segment(product: dict) -> Optional[str]:
+        text = " ".join(
+            [
+                str(product.get("title") or ""),
+                str(product.get("category") or ""),
+                str(product.get("description") or ""),
+                " ".join(str(tag) for tag in (product.get("tags") or [])),
+            ]
+        ).lower()
+        normalized = f" {re.sub(r'[^a-z0-9]+', ' ', text).strip()} "
+        if re.search(r"\b(?:unisex|gender neutral|men and women|women and men)\b", normalized):
+            return None
+
+        menswear = bool(
+            re.search(r"\b(?:menswear|mens|men|man|male|boys|boy|groom|boxers?|briefs)\b", normalized)
+        )
+        womenswear = bool(
+            re.search(
+                r"\b(?:womenswear|womens|women|woman|female|ladies|lady|girls|girl|dresses?|skirts?|blouses?|bralette|bikini|bodysuit)\b",
+                normalized,
+            )
+        )
+        if menswear == womenswear:
+            return None
+        return "menswear" if menswear else "womenswear"
+
+    @staticmethod
+    def _target_gender_reference(product: dict) -> Optional[str]:
+        for tag in product.get("tags") or []:
+            match = re.match(r"^target\s+gender\s*:\s*(.+)$", str(tag).strip(), flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip().lower()
+        return None
+
+    def _apply_catalog_segments(self, products: list[dict]) -> list[dict]:
+        """Resolve opaque Shopify target-gender metaobjects without weakening strict segment filtering."""
+        reference_votes: dict[str, Counter] = defaultdict(Counter)
+        for product in products:
+            reference = self._target_gender_reference(product)
+            explicit_segment = self._explicit_catalog_segment(product)
+            if reference and explicit_segment:
+                reference_votes[reference][explicit_segment] += 1
+
+        resolved_references: dict[str, str] = {}
+        for reference, votes in reference_votes.items():
+            menswear_votes = votes.get("menswear", 0)
+            womenswear_votes = votes.get("womenswear", 0)
+            if menswear_votes == womenswear_votes:
+                continue
+            resolved_references[reference] = "menswear" if menswear_votes > womenswear_votes else "womenswear"
+
+        normalized_products = []
+        for product in products:
+            segment = self._explicit_catalog_segment(product)
+            if not segment:
+                segment = resolved_references.get(self._target_gender_reference(product) or "")
+            normalized_products.append({**product, "segment": segment})
+        return normalized_products
+
     def fetch_catalog_products(self) -> list[dict]:
         client = self.get_client()
         merchant_id = self.get_default_merchant_id()
@@ -461,7 +522,7 @@ class SupabaseService:
                 }
             )
 
-        return normalized_products
+        return self._apply_catalog_segments(normalized_products)
 
     def fetch_catalog_product_by_shopify_legacy_id(self, legacy_product_id: str) -> Optional[dict]:
         normalized_id = str(legacy_product_id or "").strip()
@@ -872,6 +933,7 @@ class SupabaseService:
                 inventory_quantity=item.get("inventory_quantity"),
                 inventory_policy=item.get("inventory_policy"),
                 inventory_tracked=item.get("inventory_tracked"),
+                segment=item.get("segment"),
                 tags=item.get("tags") or [],
                 metafields=item.get("metafields") or {},
             )

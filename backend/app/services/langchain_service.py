@@ -939,6 +939,7 @@ class LangChainService:
             image_signals=base.image_signals,
             color_preferences=base.color_preferences,
             fit_preferences=base.fit_preferences,
+            body_shape=base.body_shape,
             priority_focus=base.priority_focus,
             feeling_goal=base.feeling_goal,
             focus_points=merge_lists(base.focus_points, enrichment.focus_points)[:4],

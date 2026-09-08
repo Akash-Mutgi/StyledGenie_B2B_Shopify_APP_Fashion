@@ -590,6 +590,53 @@ class RecommendationService:
             ]
         ).lower()
 
+    def _body_shape_score(self, product: dict, shopper_profile: Optional[ShopperProfile]) -> int:
+        """Soft-rank silhouettes that support the saved shape; never exclude products."""
+        body_shape = (shopper_profile.body_shape if shopper_profile else None) or ""
+        body_shape = body_shape.strip().lower()
+        if not body_shape:
+            return 0
+
+        aliases = {
+            "inverted_triangle": "inverted",
+            "inverted triangle": "inverted",
+            "male inverted": "male-inverted",
+            "male rectangle": "male-rectangle",
+            "male triangle": "male-triangle",
+            "male oval": "male-oval",
+        }
+        body_shape = aliases.get(body_shape, body_shape)
+        preferred_cues = {
+            "rectangle": ("belted", "wrap", "peplum", "a-line", "high waist", "structured", "pleated"),
+            "pear": ("a-line", "wide leg", "bootcut", "boat neck", "statement sleeve", "structured shoulder", "high waist"),
+            "hourglass": ("wrap", "belted", "fitted", "tailored", "high waist", "v-neck"),
+            "inverted": ("a-line", "wide leg", "flare", "pleated", "straight leg", "v-neck"),
+            "apple": ("empire", "longline", "straight cut", "open front", "v-neck", "single breasted"),
+            "diamond": ("empire", "longline", "straight cut", "open front", "v-neck", "single breasted"),
+            "trapezoid": ("tailored", "slim fit", "regular fit", "structured", "tapered"),
+            "male-inverted": ("straight leg", "relaxed trouser", "regular fit", "v-neck", "unstructured"),
+            "male-rectangle": ("layered", "overshirt", "structured", "pleated", "tapered", "textured"),
+            "male-triangle": ("single breasted", "structured shoulder", "straight leg", "vertical stripe", "dark trouser"),
+            "male-oval": ("longline", "open collar", "straight leg", "single breasted", "vertical stripe", "regular fit"),
+        }
+        text = self._product_text(product).replace("_", "-")
+        return min(6, sum(2 for cue in preferred_cues.get(body_shape, ()) if cue in text))
+
+    def _body_shape_reason(self, shopper_profile: Optional[ShopperProfile], bucket: str) -> Optional[str]:
+        body_shape = (shopper_profile.body_shape if shopper_profile else None) or ""
+        if not body_shape:
+            return None
+        label = body_shape.replace("male-", "").replace("-", " ")
+        benefit = {
+            "tops": "creates proportion through the upper body",
+            "bottoms": "balances the waist-to-hip line",
+            "outerwear": "adds clean structure to the silhouette",
+            "dresswear": "keeps the overall silhouette balanced",
+            "footwear": "keeps the outfit line visually grounded",
+            "accessories": "adds focus without disrupting the silhouette",
+        }.get(bucket, "supports balanced proportions")
+        return f"supports your {label} shape and {benefit}"
+
     def _support_slot_label(self, slot_key: str) -> str:
         return {
             "top": "Top",
@@ -1380,13 +1427,15 @@ class RecommendationService:
                 shopper_profile=shopper_profile,
                 target_segment=target_segment,
             )
+            body_shape_score = self._body_shape_score(product, shopper_profile)
             scored_products.append(
                 {
                     **base,
                     "product_colors": product_colors,
                     "palette_score": palette_score,
                     "context_score": context_score,
-                    "score": base["score"] + palette_score + context_score,
+                    "body_shape_score": body_shape_score,
+                    "score": base["score"] + palette_score + context_score + body_shape_score,
                 }
             )
         scored_products = [item for item in scored_products if self._product_segment_compatible(item, target_segment)]
@@ -1538,13 +1587,15 @@ class RecommendationService:
                 shopper_profile=shopper_profile,
                 image_analysis=image_analysis,
             )
+            body_shape_score = self._body_shape_score(product, shopper_profile)
             scored_products.append(
                 {
                     **base,
                     "product_colors": product_colors,
                     "palette_score": palette_score,
                     "context_score": context_score,
-                    "score": base["score"] + palette_score + context_score,
+                    "body_shape_score": body_shape_score,
+                    "score": base["score"] + palette_score + context_score + body_shape_score,
                 }
             )
 
@@ -1608,6 +1659,7 @@ class RecommendationService:
                     strategy_label=strategy_label,
                     occasion=occasion,
                     weather=weather,
+                    shopper_profile=shopper_profile,
                 ),
                 segment=required_segment,
                 support_slot=self._support_slot_label(item.get("support_slot") or item.get("bucket") or "piece"),
@@ -1713,6 +1765,7 @@ class RecommendationService:
                 bucket=bucket,
                 image_analysis=image_analysis,
             )
+            body_shape_score = self._body_shape_score(product, shopper_profile)
             hero_pool.append(
                 {
                     **base,
@@ -1722,7 +1775,8 @@ class RecommendationService:
                     "style_score": style_score,
                     "silhouette_score": silhouette_score,
                     "scope_score": scope_score,
-                    "score": base["score"] + 14 + palette_score + style_score + silhouette_score + scope_score,
+                    "body_shape_score": body_shape_score,
+                    "score": base["score"] + 14 + palette_score + style_score + silhouette_score + scope_score + body_shape_score,
                 }
             )
 
@@ -1792,6 +1846,7 @@ class RecommendationService:
                 shopper_profile=shopper_profile,
                 anchor_bucket=anchor_bucket,
             )
+            body_shape_score = self._body_shape_score(product, shopper_profile)
             support_scored.append(
                 {
                     **base,
@@ -1800,7 +1855,8 @@ class RecommendationService:
                     "palette_score": palette_score,
                     "context_score": context_score,
                     "style_score": style_score,
-                    "score": base["score"] + palette_score + context_score + style_score,
+                    "body_shape_score": body_shape_score,
+                    "score": base["score"] + palette_score + context_score + style_score + body_shape_score,
                 }
             )
 
@@ -1959,6 +2015,9 @@ class RecommendationService:
         weather = shopper_profile.weather_context if shopper_profile else None
         feeling = (shopper_profile.feeling_goal or shopper_profile.priority_focus) if shopper_profile else None
         details = [bucket_copy]
+        body_shape_reason = self._body_shape_reason(shopper_profile, bucket)
+        if body_shape_reason:
+            details.append(body_shape_reason)
         if palette_strategy.get("label"):
             details.append(f"stays inside a {palette_strategy['label']}")
         if occasion:
@@ -1978,6 +2037,7 @@ class RecommendationService:
         strategy_label: str,
         occasion: Optional[str],
         weather: Optional[str],
+        shopper_profile: Optional[ShopperProfile] = None,
     ) -> str:
         bucket = item.get("bucket") or "general"
         bucket_copy = {
@@ -1990,6 +2050,9 @@ class RecommendationService:
         }.get(bucket, "keeps the look coordinated")
 
         details = [bucket_copy]
+        body_shape_reason = self._body_shape_reason(shopper_profile, bucket)
+        if body_shape_reason:
+            details.append(body_shape_reason)
         if strategy_label:
             details.append(f"stays inside a {strategy_label} colour story")
         if occasion:
@@ -2517,6 +2580,9 @@ class RecommendationService:
         shopper_profile: ShopperProfile,
     ) -> str:
         details = [f"keeps the {anchor_label} focus"]
+        body_shape_reason = self._body_shape_reason(shopper_profile, item.get("bucket") or "general")
+        if body_shape_reason:
+            details.append(body_shape_reason)
         if palette_strategy:
             details.append(f"stays inside a {palette_strategy}")
         if style_label:
@@ -2544,6 +2610,9 @@ class RecommendationService:
             "dresswear": "keeps the recreated silhouette close to the inspiration",
         }.get(bucket, "supports the recreated outfit")
         details = [bucket_copy]
+        body_shape_reason = self._body_shape_reason(shopper_profile, bucket)
+        if body_shape_reason:
+            details.append(body_shape_reason)
         if palette_strategy:
             details.append(f"stays within a {palette_strategy}")
         if style_label:
@@ -2869,6 +2938,7 @@ class RecommendationService:
                 strategy_label=palette_strategy["label"],
                 occasion=shopper_profile.occasion_context if shopper_profile else None,
                 weather=shopper_profile.weather_context if shopper_profile else None,
+                shopper_profile=shopper_profile,
             )
 
         if mode == "get_inspired" and image_analysis is not None:

@@ -34,6 +34,7 @@ class ShopperProfileInput(BaseModel):
     feel: Optional[str] = None
     color_preference: Optional[str] = None
     fit_preference: Optional[str] = None
+    body_shape: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -132,6 +133,7 @@ class ShopperProfile(BaseModel):
     image_signals: list[str] = Field(default_factory=list)
     color_preferences: list[str] = Field(default_factory=list)
     fit_preferences: list[str] = Field(default_factory=list)
+    body_shape: Optional[str] = None
     priority_focus: Optional[str] = None
     feeling_goal: Optional[str] = None
     focus_points: list[str] = Field(default_factory=list)
@@ -489,6 +491,7 @@ class CatalogProductOption(BaseModel):
     inventory_quantity: Optional[int] = None
     inventory_policy: Optional[str] = None
     inventory_tracked: Optional[bool] = None
+    segment: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     metafields: dict[str, list[str]] = Field(default_factory=dict)
 
@@ -515,6 +518,7 @@ class CatalogProductDetail(BaseModel):
     inventory_quantity: Optional[int] = None
     inventory_policy: Optional[str] = None
     inventory_tracked: Optional[bool] = None
+    segment: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     metafields: dict[str, list[str]] = Field(default_factory=dict)
     source: str = "synced_catalog"

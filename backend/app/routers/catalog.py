@@ -34,6 +34,7 @@ def _build_catalog_product_detail(product: dict, source: str) -> CatalogProductD
         inventory_quantity=product.get("inventory_quantity"),
         inventory_policy=product.get("inventory_policy"),
         inventory_tracked=product.get("inventory_tracked"),
+        segment=product.get("segment"),
         tags=product.get("tags") or [],
         metafields=product.get("metafields") or {},
         source=source,
