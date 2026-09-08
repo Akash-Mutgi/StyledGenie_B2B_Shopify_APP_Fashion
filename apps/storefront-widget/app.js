@@ -2776,6 +2776,7 @@ function renderOnboardingIntro() {
     selected: shopperOnboardingData.path === "scan",
     onClick: () => {
       shopperOnboardingData.path = "scan";
+      shopperOnboardingData.scanAnalysisError = "";
       openOnboardingStep("scan-upload");
     },
   });
@@ -8872,7 +8873,21 @@ function resetCameraCard() {
   syncUploadDrawer();
 }
 
-function showCameraPickerFallback() {
+function cameraAccessMessage(error) {
+  const errorName = String(error?.name || "");
+  if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+    return "Camera permission is blocked. Allow camera access in your browser settings, then try again or choose a photo.";
+  }
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return "No active camera was found. Connect or enable your camera, then try again or choose a photo.";
+  }
+  if (errorName === "NotReadableError" || errorName === "TrackStartError" || errorName === "AbortError") {
+    return "Your camera is unavailable or already in use. Close other camera apps, then try again or choose a photo.";
+  }
+  return "Camera access is unavailable. Take or choose a clear photo to continue.";
+}
+
+function showCameraPickerFallback(message = "") {
   cameraPickerFallback = true;
   if (cameraCard) {
     cameraCard.classList.remove("hidden");
@@ -8898,11 +8913,11 @@ function showCameraPickerFallback() {
     }
   }
   if (fallbackHint) {
-    fallbackHint.textContent = onboardingCameraMode
+    fallbackHint.textContent = message || (onboardingCameraMode
       ? "Camera access is unavailable. Take or choose a clear full-body photo to continue."
       : window.isSecureContext
         ? "Camera access is unavailable. Take a photo or choose one from your gallery."
-        : "Direct camera access requires HTTPS. Open the secure site, or choose a photo.";
+        : "Direct camera access requires HTTPS. Open the secure site, or choose a photo.");
     fallbackHint.classList.remove("hidden");
   }
   if (capturePhotoButton) {
@@ -9044,6 +9059,7 @@ async function openCameraCapture() {
         { video: true, audio: false },
       ];
 
+  let cameraError = null;
   for (const constraints of videoConstraints) {
     try {
       cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -9052,11 +9068,15 @@ async function openCameraCapture() {
       cameraVideo.classList.remove("hidden");
       return;
     } catch (error) {
+      cameraError = error;
       stopCameraStream();
+      if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
+        break;
+      }
     }
   }
 
-  showCameraPickerFallback();
+  showCameraPickerFallback(cameraAccessMessage(cameraError));
 }
 
 function captureCameraPhoto() {
