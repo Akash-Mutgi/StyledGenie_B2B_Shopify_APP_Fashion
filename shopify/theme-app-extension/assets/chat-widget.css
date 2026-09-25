@@ -1956,3 +1956,12 @@
 .styledgenie-visually-hidden {
   position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* Suggestion chips inside messages (previously only styled in the default strip) */
+.styledgenie-suggestion-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.styledgenie-suggestion-chip {
+  font: inherit; font-size: 13px; line-height: 1.2; padding: 8px 12px; min-height: 32px;
+  border-radius: 999px; border: 1px solid rgba(17, 17, 17, 0.18); background: #fff; color: #111; cursor: pointer;
+}
+.styledgenie-suggestion-chip:hover { background: rgba(17, 17, 17, 0.05); }
+.styledgenie-suggestion-chip:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
