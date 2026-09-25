@@ -1042,7 +1042,7 @@ class ConversationService:
                 ),
             )
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         support_request, notification_result, assigned_contacts = self._create_order_support_request(
             intent=issue_intent,
             session_id=session_id,
@@ -1055,11 +1055,11 @@ class ConversationService:
             item_title=target_label,
             shopper_email=email,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         review_copy = "a damage review" if issue_intent == "damage_issue" else "a wrong-item review"
         reply = f"{assessment['reply']} I found {order_name} and I’ve started {review_copy} for {target_label}. {lead_name} now has the photo and order details."
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         support_payload = SupportPayload(
             intent=issue_intent,
@@ -1574,7 +1574,39 @@ class ConversationService:
                 customer_care_settings=customer_care_settings,
             )
 
-        if support_intent in {"return_request", "exchange_request", "refund_query"}:
+        if support_intent == "exchange_request" and not (
+            self._extract_order_reference(message) or self._extract_email(message)
+        ):
+            reply = (
+                "We don’t offer direct exchanges. To get a different size or item, return the one you have for a refund "
+                "(30 days from delivery) and place a new order. Want me to start a return?"
+            )
+            payload = SupportPayload(
+                intent="return_request",
+                title="Exchanges",
+                summary="No direct exchanges — return for a refund and reorder.",
+                actions=self._support_actions_for_intent("return_request"),
+            )
+            return reply, "exchange_request", ["Start a return", "Talk to a person"], False, payload
+
+        if support_intent == "exchange_request":
+            # StyledGenie does not offer direct exchanges: explain, then help with a return instead.
+            reply, event_type, prompts, used, payload = self._handle_order_resolution_support(
+                intent="return_request",
+                message=message,
+                session_id=session_id,
+                customer_identifier=customer_identifier,
+                recent_messages=recent_messages,
+                shopper_profile=shopper_profile,
+                customer_care_settings=customer_care_settings,
+            )
+            notice = (
+                "We don’t offer direct exchanges — to get a different size or item, return this one for a refund "
+                "and place a new order."
+            )
+            return f"{notice} {reply}", event_type, prompts, used, payload
+
+        if support_intent in {"return_request", "refund_query"}:
             return self._handle_order_resolution_support(
                 intent=support_intent,
                 message=message,
@@ -2163,7 +2195,7 @@ class ConversationService:
             )
             return reply, intent, [item.title for item in line_items[:3]], False, payload
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         support_request, notification_result, assigned_contacts = self._create_order_support_request(
             intent=intent,
             session_id=session_id,
@@ -2176,11 +2208,11 @@ class ConversationService:
             item_title=target_label,
             shopper_email=email,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         issue_copy = "a damage review" if intent == "damage_issue" else "a wrong-item review"
-        reply = f"I found {order_name} and I’ve started {issue_copy} for {target_label}. {lead_name} now has the order details."
+        reply = f"I found {order_name} and I’ve started {issue_copy} for {target_label}. {lead_name} will follow up by email {app_settings.support_response_time}."
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         payload = SupportPayload(
             intent=intent,
@@ -2398,7 +2430,7 @@ class ConversationService:
             )
             return reply, intent, prompts, False, payload
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         requested_size = self._extract_requested_size(message)
         if intent == "exchange_request" and not requested_size:
             reply = f"I found {order_name}. What size would you like instead for {target_label}?"
@@ -2444,25 +2476,25 @@ class ConversationService:
             shopper_email=email,
             requested_size=requested_size,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         if intent == "exchange_request":
             reply = (
                 f"I’ve started an exchange request for {target_label} on {order_name}"
                 f"{f' in size {requested_size}' if requested_size else ''}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         elif intent == "refund_query":
             reply = (
                 f"I’ve opened a refund review for {target_label} on {order_name}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         else:
             reply = (
                 f"I’ve started a return request for {target_label} on {order_name}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         payload = SupportPayload(
             intent=intent,
@@ -3349,6 +3381,12 @@ class ConversationService:
             closing = " They already have everything they need to follow up."
 
         return f"{opening}{expectation}{closing}"
+
+    def _lead_name(self, assigned_contacts) -> str:
+        name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else ""
+        if name and not re.search(r"\b(team|support|service|care)\b", name, re.IGNORECASE):
+            return f"{name} from our customer care team"
+        return "Our customer care team"
 
     def _support_reference(self, request_id: Optional[str]) -> str:
         cleaned = re.sub(r"[^A-Za-z0-9]", "", str(request_id or ""))

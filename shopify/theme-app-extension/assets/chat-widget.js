@@ -219,7 +219,6 @@
     support: [
       { type: "track_order", label: "Track order", action: "prompt", prompt: "Track my order" },
       { type: "return_item", label: "Return item", action: "prompt", prompt: "I need help with a return" },
-      { type: "exchange_item", label: "Exchange item", action: "prompt", prompt: "I need help with an exchange" },
       { type: "speak_to_support", label: "Talk to a person", action: "prompt", prompt: "I need to speak to a person" },
     ],
   };
@@ -1648,7 +1647,6 @@
     return [
       { label: "Track order", action: "support_topic", prompt: "Track my order" },
       { label: "Return item", action: "support_topic", prompt: "I need help with a return" },
-      { label: "Exchange item", action: "support_topic", prompt: "I need help with an exchange" },
       { label: "Shipping", action: "support_topic", prompt: "I have a shipping question" },
       { label: "Speak to someone", action: "support_topic", prompt: "I need to speak to a person" },
     ];
