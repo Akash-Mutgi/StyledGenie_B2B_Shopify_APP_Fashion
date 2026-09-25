@@ -12,6 +12,7 @@ from app.routers.chat import router as chat_router
 from app.routers.health import router as health_router
 from app.routers.merchant import router as merchant_router
 from app.routers.support import router as support_router
+from app.routers.storefront import router as storefront_router
 
 
 app = FastAPI(
@@ -25,17 +26,21 @@ repo_root = backend_root.parent
 merchant_dashboard_dir = backend_root / "merchant-dashboard"
 storefront_widget_dir = repo_root / "apps" / "storefront-widget"
 
+_allowed_origins = [origin.strip().rstrip("/") for origin in settings.allowed_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    # Also allow local development servers and Shopify's theme-editor preview domains.
+    allow_origin_regex=r"^(http://(localhost|127\.0\.0\.1)(:\d+)?|https://[a-z0-9-]+\.(myshopify\.com|shopifypreview\.com))$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Admin-Token"],
 )
 
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(support_router)
+app.include_router(storefront_router)
 app.include_router(analytics_router)
 app.include_router(catalog_router)
 app.include_router(merchant_router)

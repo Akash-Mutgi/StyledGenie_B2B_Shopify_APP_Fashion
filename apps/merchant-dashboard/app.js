@@ -1,3 +1,41 @@
+// Admin endpoints are protected by MERCHANT_ADMIN_TOKEN. The dashboard asks for it once per browser
+// and adds it to every request to the merchant/admin API.
+(() => {
+  const TOKEN_KEY = "sg_admin_token";
+  const protectedPath = /\/api\/(merchant|analytics|catalog\/import)\b/;
+  const nativeFetch = window.fetch.bind(window);
+  const readToken = () => {
+    try {
+      return window.localStorage.getItem(TOKEN_KEY) || "";
+    } catch (error) {
+      return "";
+    }
+  };
+  const askToken = () => {
+    const value = (window.prompt("Enter the StyledGenie admin token (MERCHANT_ADMIN_TOKEN):") || "").trim();
+    try {
+      if (value) window.localStorage.setItem(TOKEN_KEY, value);
+    } catch (error) {
+      /* storage blocked: token lives for this page only */
+    }
+    return value;
+  };
+  let sessionToken = readToken();
+  window.fetch = async (input, init = {}) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (!protectedPath.test(url)) return nativeFetch(input, init);
+    if (!sessionToken) sessionToken = askToken();
+    const headers = new Headers(init.headers || {});
+    headers.set("X-Admin-Token", sessionToken);
+    const response = await nativeFetch(input, { ...init, headers });
+    if (response.status === 401) {
+      try { window.localStorage.removeItem(TOKEN_KEY); } catch (error) { /* ignore */ }
+      sessionToken = "";
+    }
+    return response;
+  };
+})();
+
 const mainContent = document.getElementById("mainContent");
 const sidebarBrandName = document.getElementById("sidebarBrandName");
 const sidebarStoreDomain = document.getElementById("sidebarStoreDomain");

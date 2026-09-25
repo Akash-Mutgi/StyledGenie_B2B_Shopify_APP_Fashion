@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -9,6 +10,8 @@ from urllib.request import Request, urlopen
 from app.config import settings
 from app.services.catalog_intelligence_service import CatalogIntelligenceService
 from app.services.supabase_service import SupabaseService
+
+logger = logging.getLogger(__name__)
 
 
 class ShopifyService:
@@ -547,8 +550,8 @@ class ShopifyService:
         if self.has_orders_scope():
             try:
                 return self._lookup_order_support_details_live(normalized_reference, normalized_email)
-            except Exception:
-                pass
+            except Exception as error:  # fall back to the synced snapshot, but leave a trace
+                logger.warning("Live Shopify order lookup failed; using snapshot. %s", error)
 
         stored_order = self.supabase_service.find_order_by_reference(normalized_reference, normalized_email)
         if not stored_order:
@@ -625,6 +628,38 @@ class ShopifyService:
               displayFinancialStatus
               displayFulfillmentStatus
               statusPageUrl
+              email
+              cancelledAt
+              cancelReason
+              returnStatus
+              totalRefundedSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              refunds(first: 5) {
+                createdAt
+                totalRefundedSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+              }
+              fulfillments(first: 5) {
+                displayStatus
+                status
+                createdAt
+                inTransitAt
+                deliveredAt
+                estimatedDeliveryAt
+                trackingInfo(first: 3) {
+                  company
+                  number
+                  url
+                }
+              }
               currentTotalPriceSet {
                 shopMoney {
                   amount
@@ -666,7 +701,8 @@ class ShopifyService:
         }
         """
 
-        search_query = f'name:{reference} email:"{email}"'
+        safe_email = email.replace('"', "").replace("\\", "")
+        search_query = f'name:{reference} email:"{safe_email}"'
         response = self.graphql(query, {"query": search_query})
         nodes = (response.get("data") or {}).get("orders", {}).get("nodes", []) or []
         if not nodes:
@@ -674,14 +710,32 @@ class ShopifyService:
 
         match = nodes[0]
         customer_email = ((match.get("customer") or {}).get("email") or "").strip().lower()
-        if customer_email and customer_email != email:
+        order_email = (match.get("email") or "").strip().lower()
+        # Only reveal an order when the shopper's email matches the order's contact or customer email.
+        # Orders without any email on file are never shown through the chat.
+        known_emails = {value for value in (customer_email, order_email) if value}
+        if not known_emails or email not in known_emails:
+            return None
+        if (match.get("name") or "").lstrip("#").lower() != reference.lstrip("#").lower():
             return None
 
         return {
             "source": "live",
             "order_name": match.get("name") or reference,
-            "customer_email": customer_email or email,
+            "customer_email": email,
             "fulfillment_status": match.get("displayFulfillmentStatus") or "Status unavailable",
+            "cancelled_at": match.get("cancelledAt"),
+            "cancel_reason": match.get("cancelReason"),
+            "return_status": match.get("returnStatus"),
+            "total_refunded": self._money_amount(match.get("totalRefundedSet")),
+            "refunds": [
+                {
+                    "created_at": refund.get("createdAt"),
+                    "amount": self._money_amount(refund.get("totalRefundedSet")),
+                }
+                for refund in (match.get("refunds") or [])
+            ],
+            "shipments": [self._normalize_fulfillment(item) for item in (match.get("fulfillments") or [])],
             "financial_status": match.get("displayFinancialStatus") or "Status unavailable",
             "status_page_url": match.get("statusPageUrl"),
             "updated_at": match.get("updatedAt"),
@@ -692,6 +746,31 @@ class ShopifyService:
                 self._normalize_support_line_item(item)
                 for item in ((match.get("lineItems") or {}).get("nodes") or [])
             ],
+        }
+
+    def _money_amount(self, money_bag: Optional[dict]) -> Optional[dict]:
+        shop_money = (money_bag or {}).get("shopMoney") or {}
+        if shop_money.get("amount") is None:
+            return None
+        return {"amount": shop_money.get("amount"), "currency_code": shop_money.get("currencyCode")}
+
+    def _normalize_fulfillment(self, fulfillment: dict[str, Any]) -> dict[str, Any]:
+        tracking = [
+            {
+                "company": item.get("company"),
+                "number": item.get("number"),
+                "url": item.get("url"),
+            }
+            for item in (fulfillment.get("trackingInfo") or [])
+            if item.get("number") or item.get("url")
+        ]
+        return {
+            "status": fulfillment.get("displayStatus") or fulfillment.get("status"),
+            "shipped_at": fulfillment.get("createdAt"),
+            "in_transit_at": fulfillment.get("inTransitAt"),
+            "delivered_at": fulfillment.get("deliveredAt"),
+            "estimated_delivery_at": fulfillment.get("estimatedDeliveryAt"),
+            "tracking": tracking,
         }
 
     def _normalize_support_line_item(self, line_item: dict[str, Any]) -> dict[str, Any]:

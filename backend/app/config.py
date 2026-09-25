@@ -66,6 +66,21 @@ class Settings:
     twilio_account_sid: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
     twilio_whatsapp_from: Optional[str] = os.getenv("TWILIO_WHATSAPP_FROM")
+    # Shared secret for /api/merchant/*, /api/catalog/import and /api/analytics/* (sent as X-Admin-Token).
+    merchant_admin_token: Optional[str] = os.getenv("MERCHANT_ADMIN_TOKEN")
+    # Comma-separated storefront origins allowed to call the API from the browser.
+    allowed_origins: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "https://www.styledgenie.com,https://styledgenie.com,https://ea4aad-0f.myshopify.com",
+    )
+    # Public storefront used to read live policy pages for FAQ answers.
+    storefront_base_url: str = os.getenv("STOREFRONT_BASE_URL", "https://www.styledgenie.com")
+    support_policy_pages: str = os.getenv(
+        "SUPPORT_POLICY_PAGES",
+        "/pages/shipping-returns,/pages/terms-conditions,/pages/privacy-policy,/pages/contact,/pages/imprint,"
+        "/policies/refund-policy,/policies/shipping-policy",
+    )
+    support_response_time: str = os.getenv("SUPPORT_RESPONSE_TIME", "within 1 business day")
 
 
 settings = Settings()

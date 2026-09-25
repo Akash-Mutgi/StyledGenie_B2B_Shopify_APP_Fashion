@@ -5,7 +5,7 @@
   }
 
   const apiBase = root.dataset.apiBase || "http://127.0.0.1:8000";
-  const customizationRefreshIntervalMs = 4000;
+  const customizationRefreshIntervalMs = 5 * 60 * 1000;
   const cartRoot =
     root.dataset.cartRoot ||
     ((window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/");
@@ -24,7 +24,32 @@
       ) === index
     );
   const storefrontProductCache = new Map();
-  const customerId = "shopify-storefront-guest";
+  // One private id per browser, so no two shoppers ever share a conversation or order details.
+  const customerId = (() => {
+    const storageKey = "sg_chat_visitor_v1";
+    const makeId = () => {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return `sgv_${window.crypto.randomUUID()}`;
+      }
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      return `sgv_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    };
+    try {
+      const existing = window.localStorage.getItem(storageKey) || "";
+      if (/^sgv_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(existing)) {
+        return existing;
+      }
+      const fresh = makeId();
+      window.localStorage.setItem(storageKey, fresh);
+      return fresh;
+    } catch (error) {
+      return makeId();
+    }
+  })();
   let activeMode = "outfit_curation";
   let latestRecommendationContext = null;
   let latestCustomizationFingerprint = "";
@@ -195,7 +220,7 @@
       { type: "track_order", label: "Track order", action: "prompt", prompt: "Track my order" },
       { type: "return_item", label: "Return item", action: "prompt", prompt: "I need help with a return" },
       { type: "exchange_item", label: "Exchange item", action: "prompt", prompt: "I need help with an exchange" },
-      { type: "speak_to_support", label: "Speak to support", action: "prompt", prompt: "I need to speak to a person" },
+      { type: "speak_to_support", label: "Talk to a person", action: "prompt", prompt: "I need to speak to a person" },
     ],
   };
 
@@ -780,12 +805,15 @@
         </div>
         <div class="styledgenie-presence online">
           <span class="styledgenie-presence-dot" aria-hidden="true"></span>
-          <span class="styledgenie-status-pill">Live Stylist</span>
+          <span class="styledgenie-status-pill">AI assistant</span>
         </div>
       </div>
       <div class="styledgenie-subheader">
         <p class="styledgenie-subtitle">
           Outfit curation, inspiration, complete-the-look, and support in one conversation.
+        </p>
+        <p class="styledgenie-ai-notice" id="styledgenie-ai-notice">
+          You’re chatting with an AI assistant. It can check your order status once you share your order number and checkout email. Ask for a person at any time.
         </p>
       </div>
       <div class="styledgenie-actions">
@@ -795,7 +823,7 @@
         <button data-mode="support">Returns / Help</button>
       </div>
       <div class="styledgenie-body">
-        <div class="styledgenie-messages" id="styledgenie-messages"></div>
+        <div class="styledgenie-messages" id="styledgenie-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation"></div>
         <div class="styledgenie-composer">
           <input id="styledgenie-image" type="file" accept="image/*" hidden />
           <input id="styledgenie-image-url" type="hidden" />
@@ -804,7 +832,7 @@
             <button type="button" data-action="upload">Upload Image</button>
           </div>
           <form class="styledgenie-form" id="styledgenie-form">
-            <input id="styledgenie-input" type="text" placeholder="Tell me the occasion, budget, mood, or what you want the look to solve..." />
+            <input id="styledgenie-input" type="text" aria-label="Message" aria-describedby="styledgenie-ai-notice" maxlength="2000" placeholder="Tell me the occasion, budget, mood, or what you want the look to solve..." />
             <div class="styledgenie-composer-toolbar">
               <button
                 id="styledgenie-composer-plus"
@@ -2124,7 +2152,7 @@
     presenceNode.classList.toggle("offline", state === "offline");
 
     if (statusPillNode) {
-      statusPillNode.textContent = state === "offline" ? "Offline" : "Live Stylist";
+      statusPillNode.textContent = state === "offline" ? "Offline" : "AI assistant";
     }
   }
 
@@ -2132,7 +2160,7 @@
     const { silent = false } = options;
 
     try {
-      const response = await fetch(`${apiBase}/api/merchant/workspace`);
+      const response = await fetch(`${apiBase}/api/storefront/config`);
       if (!response.ok) {
         setPresenceState("offline");
         return;
@@ -3492,11 +3520,15 @@
       payload.actions.forEach((action) => {
         if (action.kind === "link" && action.url) {
           const link = document.createElement("a");
-          link.className = "styledgenie-secondary";
+          link.className = "styledgenie-secondary styledgenie-support-link";
           link.href = action.url;
           link.target = "_blank";
-          link.rel = "noreferrer";
+          link.rel = "noopener noreferrer";
           link.textContent = action.label;
+          const newTabHint = document.createElement("span");
+          newTabHint.className = "styledgenie-visually-hidden";
+          newTabHint.textContent = " (opens in a new tab)";
+          link.appendChild(newTabHint);
           row.appendChild(link);
           return;
         }

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import Depends, APIRouter, HTTPException
 
 from app.models.schemas import (
     CatalogImportRequest,
@@ -9,6 +9,8 @@ from app.models.schemas import (
 from app.services.shopify_service import ShopifyService
 from app.services.supabase_service import SupabaseService
 
+
+from app.services.support_guard import require_admin_token
 
 router = APIRouter(tags=["catalog"])
 shopify_service = ShopifyService()
@@ -41,7 +43,7 @@ def _build_catalog_product_detail(product: dict, source: str) -> CatalogProductD
     )
 
 
-@router.post("/api/catalog/import", response_model=CatalogImportResponse)
+@router.post("/api/catalog/import", response_model=CatalogImportResponse, dependencies=[Depends(require_admin_token)])
 def import_catalog(payload: CatalogImportRequest) -> CatalogImportResponse:
     try:
         sync_result = shopify_service.import_catalog(payload.store_name)
