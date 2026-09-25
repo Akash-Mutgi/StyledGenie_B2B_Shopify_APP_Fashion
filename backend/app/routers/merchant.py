@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import settings
 from app.models.schemas import (
@@ -23,9 +23,10 @@ from app.services.recommendation_service import RecommendationService
 from app.services.shopify_service import ShopifyService
 from app.services.supabase_service import SupabaseService
 from app.services.vision_service import VisionService
+from app.services.support_guard import require_admin_token
 
 
-router = APIRouter(tags=["merchant"])
+router = APIRouter(tags=["merchant"], dependencies=[Depends(require_admin_token)])
 supabase_service = SupabaseService()
 openai_service = OpenAIService()
 recommendation_service = RecommendationService()

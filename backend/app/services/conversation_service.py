@@ -15,6 +15,9 @@ from app.services.shopify_service import ShopifyService
 from app.services.shopper_profile_service import ShopperProfileService
 from app.services.supabase_service import SupabaseService
 from app.services.vision_service import VisionService
+from app.config import settings as app_settings
+from app.services import support_guard
+from app.services.store_knowledge_service import StoreKnowledgeService
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 class ConversationService:
     def __init__(self) -> None:
+        self.store_knowledge = StoreKnowledgeService()
+        self.store_knowledge.refresh_in_background()
         self.openai_service = OpenAIService()
         self.langchain_service = LangChainService()
         self.vision_service = VisionService()
@@ -961,7 +966,7 @@ class ConversationService:
                 ),
             )
 
-        order_details = self.shopify_service.lookup_order_support_details(order_reference, email)
+        order_details = self._verified_order_lookup(order_reference, email)
         if order_details is None:
             support_email = customer_care_settings.support_email or "info@styledgenie.com"
             reply = (
@@ -1037,7 +1042,7 @@ class ConversationService:
                 ),
             )
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         support_request, notification_result, assigned_contacts = self._create_order_support_request(
             intent=issue_intent,
             session_id=session_id,
@@ -1050,11 +1055,11 @@ class ConversationService:
             item_title=target_label,
             shopper_email=email,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         review_copy = "a damage review" if issue_intent == "damage_issue" else "a wrong-item review"
         reply = f"{assessment['reply']} I found {order_name} and I’ve started {review_copy} for {target_label}. {lead_name} now has the photo and order details."
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         support_payload = SupportPayload(
             intent=issue_intent,
@@ -1569,7 +1574,39 @@ class ConversationService:
                 customer_care_settings=customer_care_settings,
             )
 
-        if support_intent in {"return_request", "exchange_request", "refund_query"}:
+        if support_intent == "exchange_request" and not (
+            self._extract_order_reference(message) or self._extract_email(message)
+        ):
+            reply = (
+                "We don’t offer direct exchanges. To get a different size or item, return the one you have for a refund "
+                "(30 days from delivery) and place a new order. Want me to start a return?"
+            )
+            payload = SupportPayload(
+                intent="return_request",
+                title="Exchanges",
+                summary="No direct exchanges — return for a refund and reorder.",
+                actions=self._support_actions_for_intent("return_request"),
+            )
+            return reply, "exchange_request", ["Start a return", "Talk to a person"], False, payload
+
+        if support_intent == "exchange_request":
+            # StyledGenie does not offer direct exchanges: explain, then help with a return instead.
+            reply, event_type, prompts, used, payload = self._handle_order_resolution_support(
+                intent="return_request",
+                message=message,
+                session_id=session_id,
+                customer_identifier=customer_identifier,
+                recent_messages=recent_messages,
+                shopper_profile=shopper_profile,
+                customer_care_settings=customer_care_settings,
+            )
+            notice = (
+                "We don’t offer direct exchanges — to get a different size or item, return this one for a refund "
+                "and place a new order."
+            )
+            return f"{notice} {reply}", event_type, prompts, used, payload
+
+        if support_intent in {"return_request", "refund_query"}:
             return self._handle_order_resolution_support(
                 intent=support_intent,
                 message=message,
@@ -1617,18 +1654,45 @@ class ConversationService:
                 shopper_profile=shopper_profile,
             )
 
-        if support_intent == "general_support":
+        if support_intent == "general_support" and self._is_bare_help_request(message):
             return self._handle_general_support()
 
         fallback_answer = self.faq_service.answer_question(message, customer_care_settings)
+        policy_passages = []
+        try:
+            policy_passages = self.store_knowledge.relevant_passages(message)
+        except Exception as error:  # knowledge is best-effort; never break the chat
+            logger.warning("Store policy lookup failed. %s", error)
+        unsure = self.faq_service.is_generic_answer(fallback_answer) and not policy_passages
+        merchant_context = self.openai_service.merchant_context()
+        merchant_context["published_store_policies"] = policy_passages
+        merchant_context["answering_rules"] = (
+            "Answer only from published_store_policies, the fallback answer, or the knowledge base. "
+            "If none of them answers the question, say so plainly and offer to connect the shopper with a person."
+        )
         langchain_support = self.langchain_service.compose_support_reply(
             shopper_message=message,
             recent_messages=recent_messages,
             customer_care_settings=customer_care_settings,
             fallback_answer=fallback_answer,
-            merchant_context=self.openai_service.merchant_context(),
+            merchant_context=merchant_context,
             support_intent=support_intent or "support_question",
         )
+        if unsure and customer_care_settings.human_handoff_enabled:
+            reply = (
+                "I’m not sure about that one, and I don’t want to guess. "
+                "Would you like me to pass your question to a person on our team?"
+            )
+            if langchain_support is not None and langchain_support[0]:
+                reply = f"{langchain_support[0]} If that doesn’t answer it, I can pass your question to a person on our team."
+            payload = SupportPayload(
+                intent=support_intent or "support_question",
+                title="Need a person?",
+                summary="I couldn’t find this in our published policies.",
+                requires_human_review=True,
+                actions=self._support_actions_for_intent("general_support"),
+            )
+            return reply, support_intent or "support_question", ["Talk to a person", "Track my order"], bool(langchain_support), payload
         if langchain_support is not None:
             reply, prompts = langchain_support
             payload = SupportPayload(
@@ -1652,6 +1716,70 @@ class ConversationService:
             ),
         )
         return fallback_answer, support_intent or "support_question", [], False, payload
+
+    def _verified_order_lookup(self, order_reference: Optional[str], email: Optional[str]) -> Optional[dict]:
+        """Order lookup that requires a matching email and counts failed attempts per visitor/IP."""
+        visitor_id = support_guard.current_visitor_id.get()
+        client_ip = support_guard.current_client_ip.get()
+        if not order_reference or not email or support_guard.order_lookup_locked(visitor_id, client_ip):
+            return None
+        details = self.shopify_service.lookup_order_support_details(order_reference, email)
+        if details is None:
+            support_guard.record_failed_order_lookup(visitor_id, client_ip)
+        return details
+
+    def _order_facts(self, order_details: dict) -> dict:
+        """Plain, verified sentences about an order — never invented, only from Shopify fields."""
+        name = order_details.get("order_name") or "your order"
+        facts: list[str] = []
+        tracking_url = None
+        status_label = None
+        delivery_line = None
+
+        if order_details.get("cancelled_at"):
+            facts.append(f"Order {name} was cancelled on {self._format_support_date(order_details.get('cancelled_at'))}.")
+            status_label = "Cancelled"
+        shipments = order_details.get("shipments") or []
+        for index, shipment in enumerate(shipments, start=1):
+            prefix = "Your parcel" if len(shipments) == 1 else f"Parcel {index}"
+            if shipment.get("delivered_at"):
+                facts.append(f"{prefix} was delivered on {self._format_support_date(shipment['delivered_at'])}.")
+                status_label = status_label or "Delivered"
+            elif shipment.get("in_transit_at") or shipment.get("shipped_at"):
+                when = shipment.get("in_transit_at") or shipment.get("shipped_at")
+                facts.append(f"{prefix} was shipped on {self._format_support_date(when)}.")
+                status_label = status_label or "On its way"
+                if shipment.get("estimated_delivery_at"):
+                    delivery_line = f"Estimated delivery: {self._format_support_date(shipment['estimated_delivery_at'])}."
+                    facts.append(delivery_line)
+            for tracking in shipment.get("tracking") or []:
+                carrier = tracking.get("company") or "the carrier"
+                if tracking.get("number"):
+                    facts.append(f"Tracking number ({carrier}): {tracking['number']}.")
+                tracking_url = tracking_url or tracking.get("url")
+        if not shipments and not order_details.get("cancelled_at"):
+            status = self._format_support_status(order_details.get("fulfillment_status")).lower()
+            facts.append(f"Order {name} hasn’t shipped yet (status: {status}). You’ll get a tracking link by email once it leaves our warehouse.")
+            status_label = status_label or "Preparing"
+        return_status = str(order_details.get("return_status") or "").upper()
+        if return_status and return_status not in {"NO_RETURN", "NONE"}:
+            facts.append(f"Return status: {self._format_support_status(return_status).lower()}.")
+        refunded = order_details.get("total_refunded") or {}
+        try:
+            if refunded and float(refunded.get("amount") or 0) > 0:
+                facts.append(f"We’ve refunded {refunded.get('amount')} {refunded.get('currency_code') or ''}".rstrip() + ".")
+        except (TypeError, ValueError):
+            pass
+        if facts and not facts[0].startswith(("Order", "Your order")):
+            facts.insert(0, f"Here’s the latest on order {name}.")
+        return {"sentences": facts, "tracking_url": tracking_url, "status_label": status_label, "delivery_line": delivery_line}
+
+    def _format_support_date(self, value) -> str:
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return f"{parsed.day} {parsed.strftime('%B %Y')}"
+        except (TypeError, ValueError):
+            return str(value or "").split("T")[0]
 
     def _build_runtime_metadata(
         self,
@@ -2012,12 +2140,26 @@ class ConversationService:
             )
             return reply, intent, ["Track my order", "Speak to support"], False, payload
 
-        order_details = self.shopify_service.lookup_order_support_details(order_reference, email)
+        if support_guard.order_lookup_locked(support_guard.current_visitor_id.get(), support_guard.current_client_ip.get()):
+            reply = (
+                "For your security I’ve paused order lookups after several unmatched attempts. "
+                "I can pass this to a person on our team instead — just tap “Talk to a person”."
+            )
+            payload = SupportPayload(
+                intent="order_tracking",
+                title="Order lookup paused",
+                summary="Too many unmatched order lookups from this chat. A person can verify the order for you.",
+                requires_human_review=True,
+                actions=self._support_actions_for_intent("order_tracking"),
+            )
+            return reply, "order_tracking", ["Talk to a person"], False, payload
+
+        order_details = self._verified_order_lookup(order_reference, email)
         if order_details is None:
             support_email = customer_care_settings.support_email or "info@styledgenie.com"
             reply = (
-                "I couldn’t match that order yet. Double-check the order number and checkout email, "
-                f"or email {support_email} and the team can verify it for you."
+                "I couldn’t match that order number with that email. Please check both — the email must be the one used at checkout — "
+                f"or tap “Talk to a person” and our team will verify it for you."
             )
             payload = SupportPayload(
                 intent=intent,
@@ -2053,7 +2195,7 @@ class ConversationService:
             )
             return reply, intent, [item.title for item in line_items[:3]], False, payload
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         support_request, notification_result, assigned_contacts = self._create_order_support_request(
             intent=intent,
             session_id=session_id,
@@ -2066,11 +2208,11 @@ class ConversationService:
             item_title=target_label,
             shopper_email=email,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         issue_copy = "a damage review" if intent == "damage_issue" else "a wrong-item review"
-        reply = f"I found {order_name} and I’ve started {issue_copy} for {target_label}. {lead_name} now has the order details."
+        reply = f"I found {order_name} and I’ve started {issue_copy} for {target_label}. {lead_name} will follow up by email {app_settings.support_response_time}."
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         payload = SupportPayload(
             intent=intent,
@@ -2134,12 +2276,26 @@ class ConversationService:
             )
             return reply, "order_tracking", ["Track my order", "Return an item"], False, payload
 
-        order_details = self.shopify_service.lookup_order_support_details(order_reference, email)
+        if support_guard.order_lookup_locked(support_guard.current_visitor_id.get(), support_guard.current_client_ip.get()):
+            reply = (
+                "For your security I’ve paused order lookups after several unmatched attempts. "
+                "I can pass this to a person on our team instead — just tap “Talk to a person”."
+            )
+            payload = SupportPayload(
+                intent="order_tracking",
+                title="Order lookup paused",
+                summary="Too many unmatched order lookups from this chat. A person can verify the order for you.",
+                requires_human_review=True,
+                actions=self._support_actions_for_intent("order_tracking"),
+            )
+            return reply, "order_tracking", ["Talk to a person"], False, payload
+
+        order_details = self._verified_order_lookup(order_reference, email)
         if order_details is None:
             support_email = customer_care_settings.support_email or "info@styledgenie.com"
             reply = (
-                "I couldn’t match that order yet. Double-check the order number and checkout email, "
-                f"or email {support_email} and the team can verify it for you."
+                "I couldn’t match that order number with that email. Please check both — the email must be the one used at checkout — "
+                "or tap “Talk to a person” and our team will verify it for you."
             )
             payload = SupportPayload(
                 intent="order_tracking",
@@ -2155,13 +2311,14 @@ class ConversationService:
         order_name = order_details.get("order_name") or self._format_order_reference(order_reference)
         fulfillment_status = self._format_support_status(order_details.get("fulfillment_status"))
         source = order_details.get("source")
-        delivery_estimate = self._support_delivery_hint(fulfillment_status) if source == "live" else None
+        order_facts = self._order_facts(order_details)
+        delivery_estimate = order_facts.get("delivery_line") or (
+            self._support_delivery_hint(fulfillment_status) if source == "live" else None
+        )
         if source == "snapshot":
             reply = f"I found the latest synced order snapshot for {order_name}. The stored status is {fulfillment_status.lower()}."
         else:
-            reply = f"Your order {order_name} is currently {fulfillment_status.lower()}."
-        if delivery_estimate:
-            reply = f"{reply} {delivery_estimate}"
+            reply = " ".join(order_facts.get("sentences") or [f"Your order {order_name} is currently {fulfillment_status.lower()}."])
 
         ai_reply = self.langchain_service.compose_support_reply(
             shopper_message=message,
@@ -2175,7 +2332,13 @@ class ConversationService:
                     "financial_status": self._format_support_status(order_details.get("financial_status")),
                     "delivery_estimate": delivery_estimate,
                     "source": source,
-                    "tracking_url": order_details.get("status_page_url"),
+                    "order_status_page": order_details.get("status_page_url"),
+                    "shipments": order_details.get("shipments") or [],
+                    "cancelled_at": order_details.get("cancelled_at"),
+                    "return_status": order_details.get("return_status"),
+                    "total_refunded": order_details.get("total_refunded"),
+                    "refunds": order_details.get("refunds") or [],
+                    "facts_already_verified": order_facts.get("sentences") or [],
                 }
             },
             support_intent="order_tracking",
@@ -2190,18 +2353,18 @@ class ConversationService:
             source=source,
             order_reference=order_name,
             customer_email=order_details.get("customer_email") or email,
-            fulfillment_status=fulfillment_status,
+            fulfillment_status=order_facts.get("status_label") or fulfillment_status,
             financial_status=self._format_support_status(order_details.get("financial_status")),
-            tracking_url=order_details.get("status_page_url"),
+            tracking_url=order_facts.get("tracking_url") or order_details.get("status_page_url"),
             delivery_estimate=delivery_estimate,
-            status_label=fulfillment_status,
+            status_label=order_facts.get("status_label") or fulfillment_status,
             line_items=self._support_line_items_from_order(order_details),
             actions=self._support_actions_for_intent(
                 "order_tracking",
-                tracking_url=order_details.get("status_page_url"),
+                tracking_url=order_facts.get("tracking_url") or order_details.get("status_page_url"),
             ),
         )
-        return reply, "order_tracking", ["Return an item", "Exchange an item", "Need more help"], False, payload
+        return reply, "order_tracking", ["Return an item", "Talk to a person", "Need more help"], False, payload
 
     def _handle_order_resolution_support(
         self,
@@ -2230,12 +2393,12 @@ class ConversationService:
             )
             return reply, intent, ["Track my order", "Speak to support"], False, payload
 
-        order_details = self.shopify_service.lookup_order_support_details(order_reference, email)
+        order_details = self._verified_order_lookup(order_reference, email)
         if order_details is None:
             support_email = customer_care_settings.support_email or "info@styledgenie.com"
             reply = (
-                "I couldn’t match that order yet. Double-check the order number and checkout email, "
-                f"or email {support_email} and the team can verify it for you."
+                "I couldn’t match that order number with that email. Please check both — the email must be the one used at checkout — "
+                "or tap “Talk to a person” and our team will verify it for you."
             )
             payload = SupportPayload(
                 intent=intent,
@@ -2267,7 +2430,7 @@ class ConversationService:
             )
             return reply, intent, prompts, False, payload
 
-        target_label = selected_item.get("title") if selected_item else f"the item on {order_name}"
+        target_label = selected_item.get("title") if selected_item else "your items"
         requested_size = self._extract_requested_size(message)
         if intent == "exchange_request" and not requested_size:
             reply = f"I found {order_name}. What size would you like instead for {target_label}?"
@@ -2313,25 +2476,25 @@ class ConversationService:
             shopper_email=email,
             requested_size=requested_size,
         )
-        lead_name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else "the support team"
+        lead_name = self._lead_name(assigned_contacts)
         if intent == "exchange_request":
             reply = (
                 f"I’ve started an exchange request for {target_label} on {order_name}"
                 f"{f' in size {requested_size}' if requested_size else ''}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         elif intent == "refund_query":
             reply = (
                 f"I’ve opened a refund review for {target_label} on {order_name}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         else:
             reply = (
                 f"I’ve started a return request for {target_label} on {order_name}. "
-                f"{eligibility.get('reason')} {lead_name} now has the order details."
+                f"{eligibility.get('reason')} {lead_name} will follow up by email {app_settings.support_response_time}."
             )
         if not (notification_result.email_sent or notification_result.whatsapp_sent):
-            reply = f"{reply} I’ve logged it here even though no notification channel is configured yet."
+            reply = f"{reply}"  # notifications not configured: request is still stored for the team
 
         payload = SupportPayload(
             intent=intent,
@@ -2461,6 +2624,11 @@ class ConversationService:
         )
         return reply, "sizing_question", ["Returns help", "Track my order"], False, payload
 
+    def _is_bare_help_request(self, message: str) -> bool:
+        """'help' / 'support' / 'I have a question' — no actual question to answer yet."""
+        words = re.findall(r"[\wäöüß]+", (message or "").lower())
+        return len(words) <= 4 and "?" not in (message or "")
+
     def _handle_general_support(
         self,
     ) -> tuple[str, str, list[str], bool, Optional[SupportPayload]]:
@@ -2531,19 +2699,19 @@ class ConversationService:
         prompt_actions = {
             "order_tracking": [
                 SupportAction(label="Return an item", prompt="I want to return this order"),
-                SupportAction(label="Exchange an item", prompt="I want to exchange an item from this order"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "return_request": [
                 SupportAction(label="Track my order", prompt="Track my order"),
-                SupportAction(label="Speak to support", prompt="I need to speak to a person"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "exchange_request": [
                 SupportAction(label="Track my order", prompt="Track my order"),
-                SupportAction(label="Speak to support", prompt="I need to speak to a person"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "refund_query": [
                 SupportAction(label="Track my order", prompt="Track my order"),
-                SupportAction(label="Speak to support", prompt="I need to speak to a person"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "shipping_question": [
                 SupportAction(label="Track my order", prompt="Track my order"),
@@ -2560,17 +2728,17 @@ class ConversationService:
             "damage_issue": [
                 SupportAction(label="Upload a photo", kind="upload"),
                 SupportAction(label="Track my order", prompt="Track my order"),
-                SupportAction(label="Speak to support", prompt="I need to speak to a person"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "wrong_item_issue": [
                 SupportAction(label="Upload a photo", kind="upload"),
                 SupportAction(label="Track my order", prompt="Track my order"),
-                SupportAction(label="Speak to support", prompt="I need to speak to a person"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
             "general_support": [
                 SupportAction(label="Track my order", prompt="Track my order"),
                 SupportAction(label="Returns help", prompt="I need help with a return"),
-                SupportAction(label="Sizing help", prompt="I need help with sizing"),
+                SupportAction(label="Talk to a person", prompt="I need to speak to a person"),
             ],
         }
         actions.extend(prompt_actions.get(intent, []))
@@ -2589,6 +2757,8 @@ class ConversationService:
 
     def _format_support_status(self, value: Optional[str]) -> str:
         normalized = str(value or "Status unavailable").replace("_", " ").strip()
+        if normalized.isupper():  # Shopify enums like PARTIALLY_REFUNDED -> "Partially refunded"
+            normalized = normalized.lower()
         return normalized[:1].upper() + normalized[1:] if normalized else "Status unavailable"
 
     def _support_delivery_hint(self, fulfillment_status: str) -> Optional[str]:
@@ -2921,25 +3091,21 @@ class ConversationService:
 
         return self._is_support_follow_up(message, recent_messages)
 
+    _HANDOFF_PATTERN = re.compile(
+        r"\b("
+        r"human|real person|a person|to a person|talk to someone|speak to someone|someone real|"
+        r"agent|representative|customer service rep|speak to support|talk to support|contact support|"
+        r"complaint|complain|frustrated|angry|not helpful|useless|"
+        r"damaged item|faulty item|wrong item|"
+        r"mensch|mitarbeiter|kundenservice|beschwerde|echte person"
+        r")\b",
+        re.IGNORECASE,
+    )
+
     def _should_trigger_handoff(self, message: str, customer_care_settings: CustomerCareSettings) -> bool:
         if not customer_care_settings.human_handoff_enabled:
             return False
-
-        lowered = (message or "").lower()
-        escalation_terms = {
-            "human",
-            "agent",
-            "someone",
-            "person",
-            "complaint",
-            "frustrated",
-            "not helpful",
-            "speak to support",
-            "damaged item",
-            "faulty item",
-            "wrong item",
-        }
-        return any(term in lowered for term in escalation_terms)
+        return bool(self._HANDOFF_PATTERN.search(message or ""))
 
     def _is_handoff_follow_up(self, message: str, recent_events: list[dict]) -> bool:
         if not recent_events:
@@ -3014,6 +3180,15 @@ class ConversationService:
         shopper_profile,
         customer_care_settings: CustomerCareSettings,
     ) -> tuple[str, str, list[str], bool]:
+        if not support_guard.allow_handoff(support_guard.current_visitor_id.get(), support_guard.current_client_ip.get()):
+            support_email = customer_care_settings.support_email or "info@styledgenie.com"
+            return (
+                "I’ve already passed your conversation to our team — they’ll reply by email "
+                f"{app_settings.support_response_time}. If it’s urgent, write to {support_email}.",
+                "human_handoff_rate_limited",
+                [],
+                False,
+            )
         shopper_email = self._extract_email(message) or self._extract_email_from_messages(recent_messages)
         shopper_phone = self._extract_phone(message) or self._extract_phone_from_messages(recent_messages)
         order_reference = self._extract_order_reference(message) or self._extract_order_from_messages(recent_messages)
@@ -3168,10 +3343,11 @@ class ConversationService:
     ) -> str:
         assigned_contacts = support_request.assigned_contacts
         primary_contact = assigned_contacts[0] if assigned_contacts else None
-        if primary_contact and primary_contact.name.strip():
-            lead_copy = f"{primary_contact.name.strip()} from customer care"
+        contact_name = primary_contact.name.strip() if primary_contact else ""
+        if contact_name and not re.search(r"\b(team|support|service|care)\b", contact_name, re.IGNORECASE):
+            lead_copy = f"{contact_name} from customer care"
         else:
-            lead_copy = "the support team"
+            lead_copy = "our customer care team"
 
         channel_parts = []
         if notification_result.email_sent:
@@ -3187,7 +3363,7 @@ class ConversationService:
             )
         else:
             opening = (
-                f"I’ve opened a support request for {lead_copy} and attached this conversation."
+                f"I’ve passed your conversation to {lead_copy}."
             )
 
         missing_bits = []
@@ -3195,12 +3371,26 @@ class ConversationService:
             missing_bits.append("your best email")
         if not order_reference:
             missing_bits.append("your order number")
+        reference = self._support_reference(support_request.id)
+        expectation = (
+            f" Your reference is {reference}. A person from our team will reply by email {app_settings.support_response_time}."
+        )
         if missing_bits:
-            closing = f" If you send {self._join_for_sentence(missing_bits)}, I’ll attach that too so they can pick this up faster."
+            closing = f" Please send {self._join_for_sentence(missing_bits)} so they can reach you."
         else:
-            closing = " They already have enough detail to follow up from here."
+            closing = " They already have everything they need to follow up."
 
-        return f"{opening}{closing}"
+        return f"{opening}{expectation}{closing}"
+
+    def _lead_name(self, assigned_contacts) -> str:
+        name = assigned_contacts[0].name.strip() if assigned_contacts and assigned_contacts[0].name.strip() else ""
+        if name and not re.search(r"\b(team|support|service|care)\b", name, re.IGNORECASE):
+            return f"{name} from our customer care team"
+        return "Our customer care team"
+
+    def _support_reference(self, request_id: Optional[str]) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9]", "", str(request_id or ""))
+        return f"SG-{cleaned[:8].upper()}" if cleaned else "SG-PENDING"
 
     def _select_support_contacts(self, customer_care_settings: CustomerCareSettings) -> list[SupportContact]:
         active_contacts = self._contacts_on_shift(customer_care_settings.escalation_contacts)

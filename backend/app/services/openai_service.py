@@ -2148,7 +2148,7 @@ class OpenAIService:
                 }
                 for item in workspace.knowledge_base[:8]
             ],
-            "customer_care_settings": workspace.customer_care_settings.dict(),
+            "customer_care_settings": workspace.customer_care_settings.model_dump(exclude={"escalation_contacts"}),
             "shopper_feedback": {
                 "love_it": workspace.overview.feedback_summary.love_it,
                 "show_another_option": workspace.overview.feedback_summary.show_another_option,

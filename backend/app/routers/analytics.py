@@ -1,10 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.models.schemas import AnalyticsOverview, MerchantDashboardSnapshot
 from app.services.supabase_service import SupabaseService
 
+from app.services.support_guard import require_admin_token
 
-router = APIRouter(tags=["analytics"])
+router = APIRouter(tags=["analytics"], dependencies=[Depends(require_admin_token)])
 supabase_service = SupabaseService()
 
 

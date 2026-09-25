@@ -277,7 +277,7 @@ class LangChainService:
                     "shopper_message": shopper_message,
                     "support_intent": support_intent,
                     "fallback_answer": fallback_answer,
-                    "customer_care_settings_json": customer_care_settings.model_dump_json(),
+                    "customer_care_settings_json": customer_care_settings.model_dump_json(exclude={"escalation_contacts"}),
                     "merchant_context_json": json.dumps(merchant_context),
                     "recent_messages_json": json.dumps(
                         [
