@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -33,7 +34,7 @@ MAX_TURNS = 16
 MAX_MESSAGE_CHARS = 2000
 MAX_KNOWLEDGE_CHARS = 16000
 MAX_TOOL_ROUNDS = 3
-SETTINGS_CACHE_SECONDS = 300
+SETTINGS_CACHE_SECONDS = 1800
 
 TOOLS = [
     {
@@ -214,17 +215,29 @@ class SupportAgent:
             self._notifier = NotificationService()
         return self._notifier
 
-    def care_settings(self):
-        now = time.time()
-        if self._care_settings is None or now - self._care_settings_at > SETTINGS_CACHE_SECONDS:
-            try:
-                self._care_settings = self.supabase.fetch_workspace_snapshot().customer_care_settings
-            except Exception as error:
-                logger.warning("Could not load customer care settings: %s", error)
-                from app.models.schemas import CustomerCareSettings
+    def _refresh_care_settings(self) -> None:
+        try:
+            self._care_settings = self.supabase.fetch_workspace_snapshot().customer_care_settings
+            self._care_settings_at = time.time()
+        except Exception as error:
+            logger.warning("Could not load customer care settings: %s", error)
+        finally:
+            self._care_refreshing = False
 
-                self._care_settings = self._care_settings or CustomerCareSettings()
-            self._care_settings_at = now
+    def warm(self) -> None:
+        """Load merchant settings in the background so no shopper waits on the database."""
+        if getattr(self, "_care_refreshing", False):
+            return
+        self._care_refreshing = True
+        threading.Thread(target=self._refresh_care_settings, name="support-settings", daemon=True).start()
+
+    def care_settings(self):
+        if self._care_settings is None or time.time() - self._care_settings_at > SETTINGS_CACHE_SECONDS:
+            self.warm()
+        if self._care_settings is None:
+            from app.models.schemas import CustomerCareSettings
+
+            return CustomerCareSettings()
         return self._care_settings
 
     def support_email(self) -> str:

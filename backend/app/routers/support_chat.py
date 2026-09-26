@@ -20,6 +20,7 @@ router = APIRouter(tags=["support-chat"])
 knowledge = StoreKnowledgeService()
 knowledge.refresh_in_background()  # warm the policy cache at start-up
 agent = SupportAgent(knowledge=knowledge)
+agent.warm()  # load merchant settings at start-up, off the request path
 
 
 class SupportChatMessage(BaseModel):
