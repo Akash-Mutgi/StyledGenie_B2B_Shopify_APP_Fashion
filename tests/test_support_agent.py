@@ -150,6 +150,21 @@ class HandoffTriggerTests(unittest.TestCase):
         self.assertIn(settings.support_response_time, reply)
 
 
+class PolicyQuestionTests(unittest.TestCase):
+    def setUp(self):
+        self.convo = ConversationService.__new__(ConversationService)
+
+    def test_policy_questions_are_not_return_requests(self):
+        for text in ["How long do I have to return an item?", "Can I return a sale item?",
+                     "What is your refund policy?", "Wie lange habe ich Zeit für eine Rücksendung?"]:
+            self.assertTrue(self.convo._is_policy_question(text, []), text)
+
+    def test_real_return_requests_still_start_the_flow(self):
+        for text in ["I want to return my dress", "Can I start a return for order #1042?",
+                     "return order 1042 anna@example.com"]:
+            self.assertFalse(self.convo._is_policy_question(text, []), text)
+
+
 class RateLimitTests(unittest.TestCase):
     def setUp(self):
         support_guard.limiter.reset()

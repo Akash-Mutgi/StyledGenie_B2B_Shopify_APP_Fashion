@@ -1606,7 +1606,9 @@ class ConversationService:
             )
             return f"{notice} {reply}", event_type, prompts, used, payload
 
-        if support_intent in {"return_request", "refund_query"}:
+        if support_intent in {"return_request", "refund_query"} and not self._is_policy_question(
+            message, recent_messages
+        ):
             return self._handle_order_resolution_support(
                 intent=support_intent,
                 message=message,
@@ -2628,6 +2630,23 @@ class ConversationService:
         """'help' / 'support' / 'I have a question' — no actual question to answer yet."""
         words = re.findall(r"[\wäöüß]+", (message or "").lower())
         return len(words) <= 4 and "?" not in (message or "")
+
+    _POLICY_QUESTION_PATTERN = re.compile(
+        r"^\s*(how\s+(long|many|much|do|does|can)|what(\s+is|'s|\s+are)?|when|do\s+you|does|can\s+i|is\s+there|are\s+there|"
+        r"wie\s+(lange|viel)|was|wann|kann\s+ich|gibt\s+es)\b",
+        re.IGNORECASE,
+    )
+
+    def _is_policy_question(self, message: str, recent_messages: list[dict]) -> bool:
+        """'How long do I have to return?' asks about the policy, not to start a return for an order."""
+        if self._extract_order_reference(message) or self._extract_email(message):
+            return False
+        if self._extract_order_from_messages(recent_messages) or self._extract_email_from_messages(recent_messages):
+            return False
+        text = (message or "").strip()
+        if re.search(r"\b(start|open|begin|initiate|want to|would like to|need to)\b.*\b(return|refund)\b", text, re.IGNORECASE):
+            return False
+        return bool(self._POLICY_QUESTION_PATTERN.search(text))
 
     def _handle_general_support(
         self,
