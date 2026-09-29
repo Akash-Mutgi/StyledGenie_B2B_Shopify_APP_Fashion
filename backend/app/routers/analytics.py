@@ -3,7 +3,6 @@ from fastapi import APIRouter
 from app.models.schemas import AnalyticsOverview, MerchantDashboardSnapshot
 from app.services.supabase_service import SupabaseService
 
-
 router = APIRouter(tags=["analytics"])
 supabase_service = SupabaseService()
 

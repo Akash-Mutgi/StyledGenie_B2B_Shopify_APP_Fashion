@@ -23,8 +23,6 @@ from app.services.recommendation_service import RecommendationService
 from app.services.shopify_service import ShopifyService
 from app.services.supabase_service import SupabaseService
 from app.services.vision_service import VisionService
-
-
 router = APIRouter(tags=["merchant"])
 supabase_service = SupabaseService()
 openai_service = OpenAIService()

@@ -10,6 +10,8 @@ from app.routers.chat import router as chat_router
 from app.routers.health import router as health_router
 from app.routers.merchant import router as merchant_router
 from app.routers.support import router as support_router
+from app.routers.support_chat import router as support_chat_router
+from app.routers.storefront import router as storefront_router
 from app.security.rate_limit import PublicApiRateLimitMiddleware
 from app.security.middleware import ShopifySessionMiddleware
 from app.security.cors import DynamicStorefrontCORSMiddleware
@@ -33,6 +35,8 @@ app.add_middleware(DynamicStorefrontCORSMiddleware)
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(support_router)
+app.include_router(support_chat_router)
+app.include_router(storefront_router)
 app.include_router(analytics_router)
 app.include_router(catalog_router)
 app.include_router(merchant_router)

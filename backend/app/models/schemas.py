@@ -38,7 +38,7 @@ class ShopperProfileInput(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=2000)
     mode: str = "outfit_curation"
     customer_id: Optional[str] = None
     exclude_product_ids: list[str] = Field(default_factory=list)

@@ -1,3 +1,22 @@
+(() => {
+  const protectedPath = /\/api\/(merchant|analytics|catalog\/import)\b/;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (!protectedPath.test(url)) return nativeFetch(input, init);
+    const headers = new Headers(init.headers || {});
+    if (window.shopify && typeof window.shopify.idToken === "function") {
+      try {
+        const token = await window.shopify.idToken();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+      } catch (_error) {
+        // Let the API return its normal 401 response when the app is outside Shopify Admin.
+      }
+    }
+    return nativeFetch(input, { ...init, headers });
+  };
+})();
+
 const mainContent = document.getElementById("mainContent");
 const sidebarBrandName = document.getElementById("sidebarBrandName");
 const sidebarStoreDomain = document.getElementById("sidebarStoreDomain");

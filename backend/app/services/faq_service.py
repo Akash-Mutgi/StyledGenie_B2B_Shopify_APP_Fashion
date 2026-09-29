@@ -1,8 +1,14 @@
+import re
 from typing import Optional
 
 from app.models.schemas import CustomerCareSettings, FAQItem
 from app.services.supabase_service import SupabaseService
 
+
+GENERIC_SUPPORT_ANSWER = (
+    "I can currently help with shipping, returns, refunds, exchanges, damaged items, and sizing. "
+    "Please ask one of those support topics for a quick answer."
+)
 
 class FAQService:
     def __init__(self) -> None:
@@ -41,22 +47,33 @@ class FAQService:
             return supabase_items
         return self.fallback_items
 
+    _FAQ_STOPWORDS = {
+        "the", "and", "for", "you", "your", "are", "with", "that", "this", "have", "can", "what", "how",
+        "when", "does", "will", "from", "about", "there", "they", "our", "any", "not", "was", "get", "sell",
+        "offer", "need", "want", "please", "much", "many", "much", "is", "do", "a", "to", "of", "in", "it",
+    }
+
     def _best_faq_match(self, message: str) -> Optional[FAQItem]:
-        keywords = [word.strip(".,!?").lower() for word in message.split() if len(word) > 2]
+        """Whole-word match on meaningful words; a single incidental word is not enough."""
+        keywords = {
+            word for word in re.findall(r"[a-zäöüß]{3,}", message.lower()) if word not in self._FAQ_STOPWORDS
+        }
+        if not keywords:
+            return None
         best_item = None
-        best_score = 0
+        best_score = 0.0
 
         for item in self.get_faqs():
-            haystack = f"{item.question} {item.answer}".lower()
-            score = sum(1 for word in keywords if word in haystack)
-
+            question_words = set(re.findall(r"[a-zäöüß]{3,}", item.question.lower()))
+            answer_words = set(re.findall(r"[a-zäöüß]{3,}", item.answer.lower()))
+            score = 2 * len(keywords & question_words) + len(keywords & answer_words)
             if score > best_score:
                 best_score = score
                 best_item = item
 
-        if best_score > 0:
+        # Require either a question-word hit plus one more, or half of the shopper's key words.
+        if best_score >= 3 or (keywords and best_score >= max(2, len(keywords))):
             return best_item
-
         return None
 
     def _shorten_answer(self, answer: str) -> str:
@@ -197,7 +214,7 @@ class FAQService:
                 "Sizing help: use the product size chart and compare it with a garment you already own."
             )
 
-        return (
-            "I can currently help with shipping, returns, refunds, exchanges, damaged items, and sizing. "
-            "Please ask one of those support topics for a quick answer."
-        )
+        return GENERIC_SUPPORT_ANSWER
+
+    def is_generic_answer(self, answer: str) -> bool:
+        return (answer or "").strip() == GENERIC_SUPPORT_ANSWER

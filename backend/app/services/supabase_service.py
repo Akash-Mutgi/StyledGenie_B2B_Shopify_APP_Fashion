@@ -995,7 +995,7 @@ class SupabaseService:
                     "shopify_order_id, order_name, customer_email, ordered_at, updated_at, total_price, subtotal_price, currency_code, ai_assisted, ai_assist_modes, line_items"
                 )
                 .eq("merchant_id", merchant_id)
-                .ilike("customer_email", normalized_email)
+                .ilike("customer_email", normalized_email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))
                 .order("ordered_at", desc=True)
                 .limit(25)
                 .execute()
@@ -1008,7 +1008,7 @@ class SupabaseService:
             if not order_name:
                 continue
             comparable_name = order_name.replace("#", "")
-            if comparable_name == normalized_reference or comparable_name.endswith(normalized_reference):
+            if comparable_name == normalized_reference and str(row.get("customer_email") or "").strip().lower() == normalized_email:
                 return row
 
         return None

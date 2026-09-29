@@ -75,6 +75,18 @@ class Settings:
     twilio_account_sid: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
     twilio_whatsapp_from: Optional[str] = os.getenv("TWILIO_WHATSAPP_FROM")
+    # Public storefront used to read live policy pages for FAQ answers.
+    storefront_base_url: str = os.getenv("STOREFRONT_BASE_URL", "https://www.styledgenie.com")
+    support_policy_pages: str = os.getenv(
+        "SUPPORT_POLICY_PAGES",
+        "/pages/shipping-returns,/pages/terms-conditions,/pages/privacy-policy,/pages/contact,/pages/imprint,"
+        "/policies/refund-policy,/policies/shipping-policy",
+    )
+    support_response_time: str = os.getenv("SUPPORT_RESPONSE_TIME", "within 1 business day")
+    # Customer-service chat (/api/support/chat): a fast chat model with tool calling.
+    support_agent_model: str = os.getenv("SUPPORT_AGENT_MODEL", "gpt-4o-mini")
+    support_agent_timeout_seconds: float = float(os.getenv("SUPPORT_AGENT_TIMEOUT_SECONDS", "20"))
+    support_email_fallback: str = os.getenv("SUPPORT_EMAIL", "info@styledgenie.com")
 
 
 settings = Settings()
