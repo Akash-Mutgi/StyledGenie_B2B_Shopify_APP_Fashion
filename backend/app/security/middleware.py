@@ -1,3 +1,5 @@
+import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -5,6 +7,9 @@ from starlette.responses import JSONResponse, Response
 from app.config import settings
 from app.security.shopify_auth import verify_shopify_session_token
 from app.security.tenant_context import resolve_or_create_shopify_merchant, use_merchant
+
+
+logger = logging.getLogger(__name__)
 
 
 class ShopifySessionMiddleware(BaseHTTPMiddleware):
@@ -29,7 +34,24 @@ class ShopifySessionMiddleware(BaseHTTPMiddleware):
 
         try:
             claims = verify_shopify_session_token(token.strip())
-        except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+        except ValueError as error:
+            safe_reasons = {
+                "Shopify session-token verification is not configured.",
+                "Malformed JWT.",
+                "Unsupported JWT algorithm.",
+                "Invalid JWT signature.",
+                "Expired JWT.",
+                "JWT is not active yet.",
+                "Invalid JWT claims.",
+                "JWT audience mismatch.",
+                "JWT must identify the same Shopify myshopify.com shop in iss and dest.",
+                "JWT subject is missing.",
+            }
+            reason = str(error) if str(error) in safe_reasons else "Malformed token claims."
+            logger.warning("Shopify session token rejected: %s", reason)
+            return self._unauthorized()
+        except (TypeError, KeyError, UnicodeDecodeError):
+            logger.warning("Shopify session token rejected: malformed token data.")
             return self._unauthorized()
 
         if not settings.supabase_jwt_secret:
