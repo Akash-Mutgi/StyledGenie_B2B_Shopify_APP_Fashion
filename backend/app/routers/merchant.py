@@ -40,7 +40,7 @@ def get_merchant_workspace() -> MerchantWorkspaceSnapshot:
 
 @router.get("/api/merchant/shopify-capabilities", response_model=ShopifyCapabilitySnapshot)
 def get_shopify_capabilities() -> ShopifyCapabilitySnapshot:
-    api_base_url = (settings.shopify_app_url or "").strip() or None
+    api_base_url = (settings.api_base_url or settings.shopify_app_url or "").strip() or None
     recent_order = supabase_service.fetch_recent_order_summary()
     setup_checks = [
         {

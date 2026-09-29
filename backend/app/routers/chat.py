@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
+    ChatbotCustomization,
     FeedbackRequest,
     ImageRequest,
     OnboardingScanAnalysisResponse,
@@ -16,6 +17,11 @@ from app.services.supabase_service import SupabaseService
 router = APIRouter(tags=["chat"])
 conversation_service = ConversationService()
 supabase_service = SupabaseService()
+
+
+@router.get("/api/storefront/config", response_model=dict[str, ChatbotCustomization])
+def get_storefront_config() -> dict[str, ChatbotCustomization]:
+    return {"chatbot_customization": supabase_service.fetch_public_chatbot_customization()}
 
 
 @router.post("/api/chat", response_model=ChatResponse)

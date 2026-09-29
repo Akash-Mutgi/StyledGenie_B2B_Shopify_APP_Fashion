@@ -1,7 +1,5 @@
 from pathlib import Path
-
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -12,6 +10,9 @@ from app.routers.chat import router as chat_router
 from app.routers.health import router as health_router
 from app.routers.merchant import router as merchant_router
 from app.routers.support import router as support_router
+from app.security.rate_limit import PublicApiRateLimitMiddleware
+from app.security.middleware import ShopifySessionMiddleware
+from app.security.cors import DynamicStorefrontCORSMiddleware
 
 
 app = FastAPI(
@@ -25,13 +26,9 @@ repo_root = backend_root.parent
 merchant_dashboard_dir = backend_root / "merchant-dashboard"
 storefront_widget_dir = repo_root / "apps" / "storefront-widget"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(PublicApiRateLimitMiddleware)
+app.add_middleware(ShopifySessionMiddleware)
+app.add_middleware(DynamicStorefrontCORSMiddleware)
 
 app.include_router(health_router)
 app.include_router(chat_router)

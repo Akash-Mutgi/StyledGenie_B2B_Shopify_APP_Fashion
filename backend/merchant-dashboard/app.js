@@ -12,14 +12,38 @@ const toastCloseButton = document.getElementById("toastCloseButton");
 const navButtons = Array.from(document.querySelectorAll(".nav-button"));
 const apiBaseUrl = resolveApiBaseUrl();
 
+async function merchantApiFetch(input, init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (window.shopify && typeof window.shopify.idToken === "function") {
+    try {
+      const sessionToken = await window.shopify.idToken();
+      if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+    } catch (error) {
+      // Let the API return its standard 401 response when Shopify auth is unavailable.
+    }
+  }
+  return fetch(input, { ...init, headers });
+}
+
+function setDashboardAccessReady(ready) {
+  navButtons.forEach((button) => {
+    button.disabled = !ready;
+  });
+  syncCatalogButton.disabled = !ready;
+  syncCatalogButton.hidden = !ready;
+}
+
+setDashboardAccessReady(false);
+
 const sectionMeta = {
+  analytics: { title: "Analytics & KPI", subtitle: "Track conversations, recommendations, and shopper outcomes." },
   overview: {
     title: "Dashboard Overview",
     subtitle:
       "Monitor live AI performance, store readiness, and the merchant profile that powers every recommendation.",
   },
   chatbot: {
-    title: "Chatbot Customizer",
+    title: "Chatbot Hub",
     subtitle:
       "Tailor the chatbot’s look, feel, and styling presence so it feels unmistakably on-brand for any connected store.",
   },
@@ -488,12 +512,25 @@ function updateShellChrome() {
   updateNavState();
 }
 
-function renderErrorState(message) {
+function renderErrorState(message, options = {}) {
+  const authRequired = Boolean(options.authRequired);
+  let adminLink = "";
+  if (authRequired && options.adminUrl) {
+    try {
+      const url = new URL(options.adminUrl);
+      if (url.origin === "https://admin.shopify.com") {
+        adminLink = `<p><a class="primary-button" href="${escapeHtml(url.href)}" target="_top" rel="noopener">Open in Shopify Admin</a></p>`;
+      }
+    } catch (_error) {
+      // Ignore an invalid URL and keep the sign-in guidance visible.
+    }
+  }
   mainContent.innerHTML = `
     <article class="workspace-card empty-state-card">
-      <h3>Dashboard unavailable</h3>
+      <h3>${authRequired ? "Shopify sign-in required" : "Dashboard unavailable"}</h3>
       <p>${escapeHtml(message)}</p>
-      <p>Start the backend, then refresh this page to load the merchant workspace.</p>
+      ${adminLink}
+      ${authRequired ? "" : "<p>Start the backend, then refresh this page to load the merchant workspace.</p>"}
     </article>
   `;
 }
@@ -2518,7 +2555,7 @@ function renderChatbotSection() {
     + '<span style="font-size:12px;color:var(--color-text-secondary)">Changes apply live on the storefront when saved</span>'
     + '<button class="primary-button" form="chatbotForm" type="submit">Save &amp; publish</button>'
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 320px;gap:1.25rem;align-items:start">'
+    + '<div class="reference-customizer">'
     + '<div>'
     + '<div style="display:flex;gap:0;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:1.25rem">'
     + Object.keys(tabLabels).map(function(t) {
@@ -2626,25 +2663,35 @@ function renderChatbotSection() {
     + '</div>'
     + '</div>'
     + '</form></div>'
-    + '<div><div class="workspace-card"><p class="control-group-title" style="margin-top:0">Live preview</p>' + previewHTML + '</div></div>'
+    + '<aside class="reference-preview"><p class="control-group-title">Preview</p><div class="reference-devices" aria-label="Preview size"><button type="button" data-preview-size="phone" aria-pressed="false">Phone</button><button type="button" data-preview-size="tablet" aria-pressed="true">Tablet</button><button type="button" data-preview-size="desktop" aria-pressed="false">Desktop</button></div><div class="reference-device" data-device="tablet">' + previewHTML + '</div><button class="primary-button" form="chatbotForm" type="submit">Save changes</button></aside>'
     + '</div>'
     + '</section>';
 }
 
 function renderChatbotModuleNav() {
-  const moduleCards = getChatbotModuleCards(workspace.overview);
-  return '<div style="display:flex;gap:8px;margin-bottom:1.25rem">'
-    + moduleCards.map(function(card) {
-        return '<button type="button" class="sg-module-card' + (card.active ? ' active' : '') + '" data-action="set-chatbot-page" data-page="' + escapeHtml(card.key) + '" style="flex:1;padding:.75rem 1rem;border-radius:var(--border-radius-md);border:0.5px solid ' + (card.active ? 'var(--color-text-primary)' : 'var(--color-border-tertiary)') + ';background:' + (card.active ? 'var(--color-text-primary)' : 'var(--color-background-primary)') + ';color:' + (card.active ? 'var(--color-background-primary)' : 'var(--color-text-primary)') + ';text-align:left;cursor:pointer">'
-          + '<div style="font-size:18px;margin-bottom:4px">' + escapeHtml(card.icon) + '</div>'
-          + '<div style="font-size:13px;font-weight:500">' + escapeHtml(card.label) + '</div>'
-          + '<div style="font-size:11px;opacity:.7">' + escapeHtml(card.meta) + '</div>'
-          + '</button>';
-      }).join('')
-    + '</div>';
+  return '<div class="reference-tabs" aria-label="Chatbot settings">' + [
+    { key: 'settings', label: 'Brand settings' },
+    { key: 'builder', label: 'Bot builder' }
+  ].map(card => '<button type="button" class="reference-tab' + (activeChatbotPage === card.key ? ' active' : '') + '" data-action="set-chatbot-page" data-page="' + card.key + '" aria-pressed="' + (activeChatbotPage === card.key) + '">' + card.label + '</button>').join('') + '</div>';
 }
 
 function wireActiveSection() {
+  document.querySelectorAll('[data-care-tab]').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-care-tab]').forEach(item => {
+        item.classList.toggle('active', item === button);
+        item.setAttribute('aria-pressed', String(item === button));
+      });
+      document.querySelectorAll('[data-care-pane]').forEach(pane => { pane.hidden = pane.dataset.carePane !== button.dataset.careTab; });
+    });
+  });
+  document.querySelectorAll('[data-preview-size]').forEach(button => {
+    button.addEventListener('click', () => {
+      const device = document.querySelector('.reference-device');
+      if (device) device.dataset.device = button.dataset.previewSize;
+      document.querySelectorAll('[data-preview-size]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    });
+  });
   document.querySelectorAll('.sg-subtab').forEach(function(tab) {
     tab.addEventListener('click', function() {
       const name = tab.dataset.subtab;
@@ -3236,6 +3283,10 @@ function renderCustomerCareSection() {
 
   return `
     <section class="section-stack">
+      <div class="reference-tabs" aria-label="Customer care settings">
+        <button type="button" class="reference-tab active" data-care-tab="rules" aria-pressed="true">Support Rules &amp; Escalation</button>
+        <button type="button" class="reference-tab" data-care-tab="knowledge" aria-pressed="false">Knowledge &amp; Answers</button>
+      </div>
       <article class="workspace-card">
         <div class="card-header">
           <div>
@@ -3246,7 +3297,7 @@ function renderCustomerCareSection() {
         </div>
 
         <form id="careForm" class="section-form">
-          <div class="control-group">
+          <div class="control-group" data-care-pane="rules">
             <p class="control-group-title">Escalation &amp; Tracking</p>
             <div class="form-grid">
               <label class="field">
@@ -3288,7 +3339,7 @@ function renderCustomerCareSection() {
             </div>
           </div>
 
-          <div class="control-group">
+          <div class="control-group" data-care-pane="rules">
             <div class="inline-section-head">
               <div>
                 <p class="control-group-title">Real Support Team</p>
@@ -3369,7 +3420,7 @@ function renderCustomerCareSection() {
             </div>
           </div>
 
-          <div class="control-group">
+          <div class="control-group" data-care-pane="knowledge" hidden>
             <p class="control-group-title">FAQ Library</p>
           <div class="repeater-list">
             ${items
@@ -3478,8 +3529,15 @@ function renderKnowledgeSection() {
 }
 
 function renderSection() {
+  document.body.dataset.section = activeSection;
   if (!workspace) {
     renderErrorState("The merchant workspace is still loading.");
+    return;
+  }
+
+  if (activeSection === "analytics") {
+    mainContent.innerHTML = renderChatbotAnalyticsPage(workspace.overview);
+    wireActiveSection();
     return;
   }
 
@@ -3492,7 +3550,6 @@ function renderSection() {
 
   if (activeSection === "chatbot") {
     mainContent.innerHTML = renderChatbotSection();
-    wireActiveSection();
     wireActiveSection();
     return;
   }
@@ -3552,7 +3609,7 @@ async function loadCatalogProductOptions() {
 
 async function loadShopifyCapabilities() {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/shopify-capabilities`);
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/shopify-capabilities`);
     if (!response.ok) {
       return;
     }
@@ -3581,12 +3638,19 @@ async function loadWorkspace(successMessage = "Workspace live", retries = 2) {
   mainContent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:60vh"><div class="sg-spinner"></div></div>';
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/workspace`);
     if (!response.ok) {
-      throw new Error("Could not load merchant workspace");
+      const error = new Error(
+        response.status === 401
+          ? "Open the merchant dashboard from Shopify Admin to authenticate."
+          : "Could not load merchant workspace"
+      );
+      error.status = response.status;
+      throw error;
     }
 
     workspace = await response.json();
+    setDashboardAccessReady(true);
     await loadCatalogProductOptions();
     await loadShopifyCapabilities();
     lastChatbotDraftFingerprint = getChatbotFingerprint(workspace.chatbot_customization);
@@ -3595,11 +3659,30 @@ async function loadWorkspace(successMessage = "Workspace live", retries = 2) {
     renderSection();
     setStatus(successMessage, "success");
   } catch (error) {
+    if (error.status === 401) {
+      setDashboardAccessReady(false);
+      setStatus("Shopify sign-in required", "error");
+      let adminUrl = "";
+      try {
+        const statusResponse = await fetch(`${apiBaseUrl}/api/runtime/status`);
+        if (statusResponse.ok) {
+          adminUrl = (await statusResponse.json()).merchant_admin_url || "";
+        }
+      } catch (_statusError) {
+        // Keep the sign-in guidance useful even if the public status route is unavailable.
+      }
+      renderErrorState("This direct URL is outside Shopify Admin. Open the installed app there to sign in.", {
+        authRequired: true,
+        adminUrl,
+      });
+      return;
+    }
     if (retries > 0) {
       await new Promise(function(r) { setTimeout(r, 1500); });
       return loadWorkspace(successMessage, retries - 1);
     }
     setStatus("Backend not reachable", "error");
+    setDashboardAccessReady(false);
     showToast(
       "Backend unavailable",
       "The merchant dashboard could not reach the API. Start the backend and reload the page.",
@@ -3636,7 +3719,7 @@ async function refreshWorkspaceSilently(options = {}) {
   }
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/workspace`);
     if (!response.ok) {
       return;
     }
@@ -3976,7 +4059,7 @@ async function autosaveChatbotCustomization(form) {
   setStatus("Syncing chatbot customization...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/chatbot-customization`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/chatbot-customization`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -4000,7 +4083,7 @@ async function saveSection(endpoint, payload, successText) {
   setStatus("Saving changes...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}${endpoint}`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}${endpoint}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -4039,7 +4122,7 @@ async function syncCatalog() {
   setStatus("Syncing catalog...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/catalog/import`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/catalog/import`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4095,7 +4178,7 @@ async function generateCatalogIntelligenceSuggestions() {
   renderSection();
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/catalog-intelligence-suggestions`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/catalog-intelligence-suggestions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4166,7 +4249,7 @@ async function generateProductDescriptionDraft() {
   setStatus("Generating product description...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-draft`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/product-description-draft`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4200,7 +4283,7 @@ async function applyProductDescriptionDraft() {
   setStatus("Applying description to Shopify...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/product-description-apply`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/product-description-apply`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4236,7 +4319,7 @@ async function generateLookBuilderDrafts() {
   setStatus("Generating merchant look drafts...", "neutral");
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/look-builder`, {
+    const response = await merchantApiFetch(`${apiBaseUrl}/api/merchant/look-builder`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

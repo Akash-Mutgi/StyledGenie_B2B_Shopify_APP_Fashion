@@ -852,16 +852,20 @@ async function fetchCatalogProducts(limit = 12, options = {}) {
       cache: forceRefresh ? "no-store" : "default",
     });
     if (!response.ok) {
+      catalogFetchState = "error";
       return catalogProductCache || [];
     }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
     if (items.length) {
       catalogProductCache = items;
+      catalogFetchState = "ready";
       return limit > 0 ? items.slice(0, limit) : items;
     }
+    catalogFetchState = "empty";
     return catalogProductCache || [];
   } catch (error) {
+    catalogFetchState = "error";
     return catalogProductCache || [];
   }
 }
@@ -1669,6 +1673,7 @@ const ONBOARDING_BODY_SHAPES_BY_GENDER = {
 };
 
 let catalogProductCache = null;
+let catalogFetchState = "unknown";
 
 const ONBOARDING_SKIN_TONES = [
   "#f5d0c5",
@@ -4278,10 +4283,16 @@ function clearCatalogLoadError() {
 function showCatalogLoadError() {
   clearCatalogLoadError();
   const row = addMessage(
-    "I couldn't load live store inventory right now. Tap Refresh styles to try again.",
+    catalogFetchState === "empty"
+      ? "This store hasn't synced any products yet. Open the merchant dashboard to connect and sync the Shopify catalog, then refresh styles."
+      : "I couldn't reach live store inventory right now. Check the store connection, then tap Refresh styles to try again.",
     "bot"
   );
   row.classList.add("catalog-load-error");
+}
+
+function openMerchantDashboard() {
+  window.open(`${apiBaseUrl}/merchant-dashboard/`, "_blank", "noopener");
 }
 
 function clearStylingUiForSupportMode() {
@@ -6427,9 +6438,16 @@ async function renderCompleteDemoResults(selectedCategories = []) {
   if (!usableCatalog.length) {
     showCatalogLoadError();
     addSuggestionChips(
-      [{ label: "Refresh styles", value: "retry" }],
-      () => {
+      [
+        { label: "Open merchant dashboard", value: "dashboard" },
+        { label: "Refresh styles", value: "retry" },
+      ],
+      (choice) => {
         clearActivePromptPanels();
+        if (choice.value === "dashboard") {
+          openMerchantDashboard();
+          return;
+        }
         void renderCompleteDemoResults(selectedCategories);
       },
       "contextual"
@@ -7803,6 +7821,7 @@ async function renderCreateFullOutfitResult(profileInputs = null, options = {}) 
     showCatalogLoadError();
     addSuggestionChips(
       [
+        { label: "Open merchant dashboard", value: "dashboard" },
         { label: "Refresh styles", value: "retry" },
         { label: "Choose another direction", value: "restart" },
       ],
@@ -7810,6 +7829,10 @@ async function renderCreateFullOutfitResult(profileInputs = null, options = {}) 
         clearActivePromptPanels();
         if (choice.value === "retry") {
           void renderCreateFullOutfitResult(profileInputs, options);
+          return;
+        }
+        if (choice.value === "dashboard") {
+          openMerchantDashboard();
           return;
         }
         returnToChatHome();
@@ -8640,7 +8663,7 @@ async function loadChatbotCustomization(options = {}) {
   customizationRequestInFlight = true;
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/merchant/workspace`);
+    const response = await fetch(`${apiBaseUrl}/api/storefront/config`);
     if (!response.ok) {
       setPresenceState("offline");
       return;

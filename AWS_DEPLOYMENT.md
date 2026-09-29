@@ -27,6 +27,9 @@ SHOPIFY_CLIENT_ID=
 SHOPIFY_CLIENT_SECRET=
 SHOPIFY_ADMIN_ACCESS_TOKEN=
 
+# Comma-separated storefront origins; do not use * in production.
+CORS_ALLOWED_ORIGINS=https://your-store.myshopify.com,https://www.your-store.com
+
 GOOGLE_VISION_API_KEY=
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_CLOUD_PROJECT=
@@ -60,3 +63,5 @@ Finally deploy the Shopify app config:
 ```powershell
 shopify app deploy --config shopify.app.production.toml --allow-updates
 ```
+
+In Shopify Admin, enable `StyledGenie Chat` under **Online Store > Themes > Customize > App embeds** and set `Backend API Base URL` to the same public backend URL.

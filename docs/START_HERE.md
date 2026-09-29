@@ -65,6 +65,20 @@ Learn in this order:
 5. Open the files in `apps/merchant-dashboard/`.
 6. Read `backend/app/main.py`.
 
+## Shopify Implementation Documents
+
+Use these documents in this order:
+
+1. `docs/SHOPIFY_IMPLEMENTATION_GUIDE.md` - exact local, hosted, Shopify, catalog, testing, and troubleshooting workflow for the current code.
+2. `docs/SHOPIFY_RELEASE_CHECKLIST.md` - operational checklist for development-store and controlled single-store releases.
+3. `docs/SHOPIFY_PRODUCTION_READINESS_PLAN.md` - required authentication, multi-tenant, webhook, security, and operational work before public launch.
+
+Supporting documents:
+
+- `docs/SIMPLE_SHOPIFY_DEPLOY.md` - detailed Render deployment walkthrough.
+- `docs/SHOPIFY_ORDER_METRICS_SETUP.md` - order scope and metrics synchronization.
+- `docs/PRODUCTION_CUTOVER_CHECKLIST.md` - final production-store cutover checks after the readiness plan is complete.
+
 ## Important Rule
 
 Build the MVP in small layers.

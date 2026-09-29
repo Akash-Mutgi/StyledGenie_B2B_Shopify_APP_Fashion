@@ -28,6 +28,7 @@ In the Supabase SQL Editor:
 1. Run `supabase/reset_dev_schema.sql` if older test tables already exist.
 2. Run `supabase/schema.sql`
 3. Run `supabase/sample_seed.sql`
+4. Run `supabase/multi_tenant_rls.sql` to add registered storefront origins and merchant RLS policies.
 
 ## Step 3: Add the environment variables
 
@@ -37,8 +38,10 @@ Open the `.env` file in the project root and add your real values:
 SUPABASE_URL=your_real_supabase_url
 SUPABASE_ANON_KEY=your_real_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_real_service_role_key
-DEFAULT_MERCHANT_ID=11111111-1111-1111-1111-111111111111
+SUPABASE_JWT_SECRET=your_supabase_legacy_jwt_secret
 ```
+
+Store `SUPABASE_JWT_SECRET` as a Railway secret. It is used to sign short-lived tenant-scoped database tokens. The service-role key is reserved for merchant lookup and provisioning; tenant-facing table queries use the anon key plus a signed token checked by RLS. If your Supabase project uses asymmetric signing keys without a legacy HS256 secret, configure a supported custom access-token hook before deploying this RLS path.
 
 ## Step 4: Restart the backend
 
@@ -87,5 +90,6 @@ Check these in order:
 2. the backend was restarted after editing `.env`
 3. `supabase==2.15.0` is installed in the backend virtual environment
 4. the tables exist in Supabase
-5. `DEFAULT_MERCHANT_ID` matches the merchant row inserted by `sample_seed.sql`
+5. the `multi_tenant_rls.sql` migration completed successfully
+6. `SUPABASE_JWT_SECRET` is configured in the backend environment
 

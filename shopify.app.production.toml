@@ -1,18 +1,19 @@
-# Production Shopify app configuration template for StyledGenie.
+# Production Shopify app configuration for NexoraAICommerceB2B.
 # Replace the placeholder values before running:
 #   shopify app deploy --config shopify.app.production.toml --allow-updates
 
-client_id = "4a82f71b23a7b71f01ce45ca28454fd8"
-name = "StyledGenieB2B_Production"
-application_url = "https://www.styledgenie.com/"
+client_id = "f8e70566e9eb35af417fdcae7d6d5b4a"
+name = "NexoraAICommerceB2B_Production"
+application_url = "https://api.nexoraaicommerce.com/"
 embedded = true
 extension_directories = ["shopify/theme-app-extension"]
 
 [webhooks]
-api_version = "2026-01"
+api_version = "2026-07"
 
 [access_scopes]
-scopes = "read_validations,write_validations,read_checkout_branding_settings,write_checkout_branding_settings,write_checkouts,read_checkouts,read_inventory,read_markets,read_markets_home,read_metaobject_definitions,read_metaobjects,read_orders,read_products,write_products,read_returns,read_shipping,read_shopify_payments_payouts,unauthenticated_read_product_inventory,unauthenticated_read_product_tags"
+# Catalog reads, product-description updates, order sync, and inventory reads.
+scopes = "read_products,write_products,read_orders,read_inventory"
 optional_scopes = []
 use_legacy_install_flow = false
 

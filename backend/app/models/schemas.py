@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -321,6 +321,18 @@ class MerchantStoreProfile(BaseModel):
 
 
 class ChatbotCustomization(BaseModel):
+    fallback_message: str = "I didn't quite catch that. Could you rephrase?"
+    retry_suggestions: bool = True
+    support_escalation: bool = True
+    accent_font: str = "Inter"
+    primary_text_size: int = Field(default=12, ge=4, le=72)
+    accent_text_size: int = Field(default=11, ge=4, le=72)
+    body_text_size: int = Field(default=14, ge=4, le=72)
+    avatar_url: str = ""
+    avatar_preset: str = "genie"
+    bubble_shape: Literal["square", "pill", "rounded"] = "square"
+    widget_position: Literal["top-left", "top-right", "bottom-left", "bottom-right"] = "bottom-right"
+    page_visibility: list[Literal["home", "product", "category", "cart", "all"]] = Field(default_factory=lambda: ["home", "category"])
     assistant_name: str = "StyledGenie Stylist"
     brand_name: str = ""
     logo_url: str = ""
@@ -440,6 +452,7 @@ class SupportRequestRecord(BaseModel):
 
 
 class CustomerCareSettings(BaseModel):
+    dashboard_preferences: dict = Field(default_factory=dict)
     support_email: str = "info@styledgenie.com"
     support_phone: str = ""
     handoff_message: str = (

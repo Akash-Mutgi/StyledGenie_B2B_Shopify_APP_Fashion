@@ -1,11 +1,11 @@
-client_id = "76a51db366db9024cdb2f0a2ed975925"
-name = "StyledGenieB2B_Production"
-application_url = "https://shivering-herring-iguana.ngrok-free.dev/"
+client_id = "f8e70566e9eb35af417fdcae7d6d5b4a"
+name = "NexoraAICommerceB2B_Production"
+application_url = "https://api.nexoraaicommerce.com/"
 embedded = true
 extension_directories = ["shopify/theme-app-extension"]
 
 [webhooks]
-api_version = "2026-01"
+api_version = "2026-07"
 
 [access_scopes]
 scopes = "read_products,write_products,read_orders,read_inventory"

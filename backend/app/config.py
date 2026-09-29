@@ -20,11 +20,17 @@ def _env_choice(name: str, default: str, allowed: set[str]) -> str:
     return value if value in allowed else default
 
 
+def _env_csv(name: str, default: str = "") -> tuple[str, ...]:
+    value = os.getenv(name, default)
+    return tuple(item.strip().rstrip("/") for item in value.split(",") if item.strip())
+
+
 @dataclass
 class Settings:
     app_name: str = "StyledGenie API"
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
+    cors_allowed_origins: tuple[str, ...] = _env_csv("CORS_ALLOWED_ORIGINS")
     shopify_api_version: str = os.getenv("SHOPIFY_API_VERSION", "2026-01")
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
@@ -42,6 +48,8 @@ class Settings:
     supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
     supabase_anon_key: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
     supabase_service_role_key: Optional[str] = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    # Legacy HS256 JWT signing secret used for short-lived tenant-scoped PostgREST claims.
+    supabase_jwt_secret: Optional[str] = os.getenv("SUPABASE_JWT_SECRET")
     default_merchant_id: Optional[str] = os.getenv("DEFAULT_MERCHANT_ID")
     google_vision_api_key: Optional[str] = os.getenv("GOOGLE_VISION_API_KEY")
     google_application_credentials: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -49,6 +57,7 @@ class Settings:
     google_cloud_project: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT")
     shopify_app_name: Optional[str] = os.getenv("SHOPIFY_APP_NAME")
     shopify_app_url: Optional[str] = os.getenv("SHOPIFY_APP_URL")
+    api_base_url: Optional[str] = os.getenv("API_BASE_URL") or os.getenv("APP_BASE_URL")
     shopify_store_domain: Optional[str] = os.getenv("SHOPIFY_STORE_DOMAIN")
     shopify_storefront_domain: Optional[str] = os.getenv("SHOPIFY_STOREFRONT_DOMAIN")
     shopify_client_id: Optional[str] = os.getenv("SHOPIFY_CLIENT_ID")

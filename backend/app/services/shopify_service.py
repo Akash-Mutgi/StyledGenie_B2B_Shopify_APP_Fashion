@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.config import settings
+from app.security.tenant_context import current_shopify_store_domain, current_storefront_domain
 from app.services.catalog_intelligence_service import CatalogIntelligenceService
 from app.services.supabase_service import SupabaseService
 
@@ -15,23 +16,22 @@ class ShopifyService:
     def __init__(self) -> None:
         self.supabase_service = SupabaseService()
         self.catalog_intelligence_service = CatalogIntelligenceService()
-        self._cached_token: Optional[str] = None
-        self._cached_token_expires_at: float = 0
+        self._cached_tokens: dict[str, tuple[str, float]] = {}
 
     def import_catalog(self, store_name: str) -> dict:
-        shop_domain = settings.shopify_store_domain or store_name
+        shop_domain = current_shopify_store_domain()
 
         if not shop_domain:
-            raise ValueError("Set SHOPIFY_STORE_DOMAIN in .env before importing.")
+            raise ValueError("Open the installed app from Shopify Admin to establish the verified store context.")
 
         merchant_id = self.supabase_service.sync_connected_store(
             shopify_store_domain=shop_domain,
             brand_name=store_name or "StyledGenie Merchant",
-            storefront_domain=settings.shopify_storefront_domain,
+            storefront_domain=current_storefront_domain() or shop_domain,
         )
 
         if not merchant_id:
-            raise ValueError("Supabase merchant setup failed. Check your Supabase keys and DEFAULT_MERCHANT_ID.")
+            raise ValueError("Supabase merchant setup failed. Check the RLS migration and tenant database secrets.")
 
         products = self.fetch_products()
         imported_count = 0
@@ -346,9 +346,9 @@ class ShopifyService:
         if not access_token:
             raise ValueError("No Shopify access token available. Check your Shopify app credentials.")
 
-        shop_domain = settings.shopify_store_domain
+        shop_domain = current_shopify_store_domain()
         if not shop_domain:
-            raise ValueError("Set SHOPIFY_STORE_DOMAIN in .env before syncing.")
+            raise ValueError("Open the installed app from Shopify Admin to establish the verified store context.")
 
         url = f"https://{shop_domain}/admin/oauth/access_scopes.json"
         request = Request(
@@ -517,7 +517,7 @@ class ShopifyService:
         }
 
     def _build_product_url(self, handle: Optional[str]) -> Optional[str]:
-        storefront_domain = settings.shopify_storefront_domain or settings.shopify_store_domain
+        storefront_domain = current_storefront_domain() or current_shopify_store_domain()
         if not handle or not storefront_domain:
             return None
 
@@ -859,9 +859,9 @@ class ShopifyService:
         if not access_token:
             raise ValueError("No Shopify access token available. Check your Shopify app credentials.")
 
-        shop_domain = settings.shopify_store_domain
+        shop_domain = current_shopify_store_domain()
         if not shop_domain:
-            raise ValueError("Set SHOPIFY_STORE_DOMAIN in .env before importing.")
+            raise ValueError("Open the installed app from Shopify Admin to establish the verified store context.")
 
         url = f"https://{shop_domain}/admin/api/{settings.shopify_api_version}/graphql.json"
         payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
@@ -891,16 +891,22 @@ class ShopifyService:
         return parsed
 
     def get_access_token(self) -> Optional[str]:
-        if settings.shopify_admin_access_token and settings.shopify_admin_access_token != "your_shopify_admin_access_token_here":
+        shop_domain = current_shopify_store_domain()
+        if (
+            settings.shopify_admin_access_token
+            and settings.shopify_admin_access_token != "your_shopify_admin_access_token_here"
+            and shop_domain == settings.shopify_store_domain
+        ):
             return settings.shopify_admin_access_token
 
-        if self._cached_token and time.time() < self._cached_token_expires_at - 60:
-            return self._cached_token
+        cached = self._cached_tokens.get(shop_domain or "")
+        if cached and time.time() < cached[1] - 60:
+            return cached[0]
 
-        return self.refresh_client_credentials_token()
+        return self.refresh_client_credentials_token(shop_domain)
 
-    def refresh_client_credentials_token(self) -> Optional[str]:
-        shop_domain = settings.shopify_store_domain
+    def refresh_client_credentials_token(self, shop_domain: Optional[str] = None) -> Optional[str]:
+        shop_domain = shop_domain or current_shopify_store_domain()
         client_id = settings.shopify_client_id
         client_secret = settings.shopify_client_secret
 
@@ -937,14 +943,13 @@ class ShopifyService:
         if not access_token:
             raise ValueError("Shopify did not return an access token.")
 
-        self._cached_token = access_token
-        self._cached_token_expires_at = time.time() + int(expires_in or 0)
+        self._cached_tokens[shop_domain] = (access_token, time.time() + int(expires_in or 0))
         return access_token
 
     def _build_token_error_message(self, status_code: int, details: str) -> str:
         compact_details = " ".join((details or "").split())
         app_name = settings.shopify_app_name or "your Shopify app"
-        shop_domain = settings.shopify_store_domain or "your Shopify store"
+        shop_domain = current_shopify_store_domain() or "the connected Shopify store"
 
         if "app_not_installed" in compact_details:
             return (

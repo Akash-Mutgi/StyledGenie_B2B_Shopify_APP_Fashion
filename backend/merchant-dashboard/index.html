@@ -3,8 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="shopify-api-key" content="f8e70566e9eb35af417fdcae7d6d5b4a" />
     <title>StyledGenie Merchant Dashboard</title>
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./reference-design.css?v=20260918-v3" />
+  <link rel="stylesheet" href="./brand-settings.css?v=7" />
+  <link rel="stylesheet" href="./bot-builder.css?v=1" />
+  <link rel="stylesheet" href="./care-design.css?v=1" />
+  <link rel="stylesheet" href="./catalog-design.css?v=4" />
+  <link rel="stylesheet" href="./analytics-design.css?v=1" />
+  <link rel="stylesheet" href="./overview-training.css?v=1" />
+  <link rel="stylesheet" href="./training-tabs.css?v=1" />
+  <link rel="stylesheet" href="./looks-design.css?v=1" />
   </head>
   <body>
     <div class="workspace-shell">
@@ -22,11 +33,14 @@
           AI stylist recommends across any connected storefront.
         </p>
 
+        <p class="nav-group-label">Workspace</p>
         <nav class="nav-list" aria-label="Merchant dashboard navigation">
-          <button class="nav-button active" data-section="overview">Dashboard Overview</button>
-          <button class="nav-button" data-section="chatbot">Chatbot Customization</button>
+          <button class="nav-button active" data-section="overview">Overview</button>
+          <button class="nav-button" data-section="chatbot">Chatbot Customizer</button>
           <button class="nav-button" data-section="catalog">Catalog Intelligence</button>
+          <button class="nav-button" data-section="analytics">Analytics &amp; KPI</button>
           <button class="nav-button" data-section="looks">Look Management</button>
+          <p class="nav-group-label">Support</p>
           <button class="nav-button" data-section="care">Customer Care Setup</button>
           <button class="nav-button" data-section="knowledge">Knowledge &amp; AI Training</button>
         </nav>
@@ -64,11 +78,21 @@
         <p class="toast-message" id="toastMessage">Your changes have been updated.</p>
       </div>
       <button class="toast-close" id="toastCloseButton" aria-label="Close notification">
-        ×
+        &times;
       </button>
     </div>
 
     <script src="./chart.min.js"></script>
-    <script src="./app.js?v=20260629-inventory-sync"></script>
+    <script src="./app.js?v=20260928-admin-handoff"></script>
+    <script src="./design-screens.js?v=20260918-v3"></script>
+  <script src="./brand-settings.js?v=7"></script>
+  <script src="./bot-builder.js?v=1"></script>
+  <script src="./care-design.js?v=1"></script>
+  <script src="./catalog-design.js?v=5"></script>
+  <script src="./analytics-design.js?v=1"></script>
+  <script src="./overview-training.js?v=1"></script>
+  <script src="./training-tabs.js?v=1"></script>
+  <script src="./looks-design.js?v=1"></script>
+  <script src="./look-settings.js?v=1"></script>
   </body>
 </html>

@@ -7,6 +7,13 @@ from typing import Optional
 from uuid import uuid4
 
 from app.config import settings
+from app.security.tenant_context import (
+    create_admin_supabase_client,
+    create_tenant_supabase_client,
+    current_merchant_id,
+    current_shopify_store_domain,
+    current_storefront_domain,
+)
 from app.models.schemas import (
     AnalyticsOverview,
     AIStackStatus,
@@ -53,39 +60,33 @@ class SupabaseService:
         self._client = None
 
     def get_default_merchant_id(self) -> Optional[str]:
-        client = self.get_client()
-        shopify_store_domain = settings.shopify_store_domain
-
-        if client is not None and shopify_store_domain:
-            try:
-                response = (
-                    client.table("merchants")
-                    .select("id")
-                    .eq("shopify_store_domain", shopify_store_domain)
-                    .limit(1)
-                    .execute()
-                )
-                if response.data:
-                    return response.data[0]["id"]
-            except Exception:
-                pass
-
-        return settings.default_merchant_id
+        return current_merchant_id()
 
     def get_client(self):
-        api_key = settings.supabase_service_role_key or settings.supabase_anon_key
-
-        if not settings.supabase_url or not api_key or create_client is None:
+        merchant_id = current_merchant_id()
+        if not merchant_id or not settings.supabase_jwt_secret or create_client is None:
+            return None
+        try:
+            # Do not share an authenticated client between different request tenants.
+            return create_tenant_supabase_client(merchant_id)
+        except Exception as error:
+            logger.warning("Tenant-scoped Supabase client initialization failed. %s", error)
             return None
 
-        if self._client is None:
-            try:
-                self._client = create_client(settings.supabase_url, api_key)
-            except Exception as error:
-                logger.warning("Supabase client initialization failed. %s", error)
-                return None
+    @staticmethod
+    def _registered_storefront_domains(*values: Optional[str]) -> list[str]:
+        from urllib.parse import urlsplit
 
-        return self._client
+        hosts: list[str] = []
+        for value in values:
+            raw = (value or "").strip()
+            if not raw:
+                continue
+            parsed = urlsplit(raw if "://" in raw else f"https://{raw}")
+            host = (parsed.hostname or "").lower().rstrip(".")
+            if host and host not in hosts:
+                hosts.append(host)
+        return hosts
 
     def _select_in_batches(
         self,
@@ -117,7 +118,7 @@ class SupabaseService:
         return rows
 
     def _default_storefront_domain(self) -> Optional[str]:
-        return settings.shopify_storefront_domain or settings.shopify_store_domain
+        return current_storefront_domain() or current_shopify_store_domain()
 
     def _default_profile(
         self,
@@ -127,7 +128,7 @@ class SupabaseService:
     ) -> MerchantStoreProfile:
         return MerchantStoreProfile(
             brand_name=brand_name or "StyledGenie",
-            connected_store_domain=connected_store_domain or settings.shopify_store_domain,
+            connected_store_domain=connected_store_domain or current_shopify_store_domain(),
             storefront_domain=storefront_domain or self._default_storefront_domain(),
             industry="Fashion ecommerce",
             brand_summary=(
@@ -234,6 +235,9 @@ class SupabaseService:
                     {
                         "brand_name": brand_name,
                         "shopify_store_domain": shopify_store_domain,
+                        "storefront_domains": self._registered_storefront_domains(
+                            resolved_storefront_domain, shopify_store_domain
+                        ),
                     }
                 )
                 .eq("id", default_merchant_id)
@@ -806,6 +810,26 @@ class SupabaseService:
                 knowledge_base=[],
             )
 
+    def fetch_public_chatbot_customization(self) -> ChatbotCustomization:
+        client = self.get_client()
+        merchant_id = self.get_default_merchant_id()
+        if client is None or not merchant_id:
+            return ChatbotCustomization()
+
+        try:
+            response = (
+                client.table("knowledge_base_entries")
+                .select("body")
+                .eq("merchant_id", merchant_id)
+                .eq("entry_type", "chatbot_customization")
+                .limit(1)
+                .execute()
+            )
+            payload = self._parse_json_body((response.data or [{}])[0].get("body"))
+            return self._merge_model(ChatbotCustomization, ChatbotCustomization(), payload)
+        except Exception:
+            return ChatbotCustomization()
+
     def update_merchant_profile(self, profile: MerchantStoreProfile) -> bool:
         client = self.get_client()
         merchant_id = self.get_default_merchant_id()
@@ -819,7 +843,11 @@ class SupabaseService:
                 .update(
                     {
                         "brand_name": profile.brand_name,
-                        "shopify_store_domain": profile.connected_store_domain or settings.shopify_store_domain,
+                        "shopify_store_domain": profile.connected_store_domain or current_shopify_store_domain(),
+                        "storefront_domains": self._registered_storefront_domains(
+                            profile.storefront_domain,
+                            profile.connected_store_domain or current_shopify_store_domain(),
+                        ),
                     }
                 )
                 .eq("id", merchant_id)
@@ -1055,7 +1083,8 @@ class SupabaseService:
             return False
 
     def ensure_merchant(self, shopify_store_domain: str, brand_name: str = "StyledGenie Merchant") -> Optional[str]:
-        client = self.get_client()
+        # Service-role access is limited to merchant lookup/provisioning.
+        client = create_admin_supabase_client()
 
         if client is None or not shopify_store_domain:
             return None
@@ -1078,6 +1107,7 @@ class SupabaseService:
                     {
                         "shopify_store_domain": shopify_store_domain,
                         "brand_name": brand_name,
+                        "storefront_domains": self._registered_storefront_domains(shopify_store_domain),
                     }
                 )
                 .execute()
@@ -1592,7 +1622,7 @@ class SupabaseService:
 
         empty_snapshot = MerchantDashboardSnapshot(
             store_name="StyledGenie",
-            store_domain=settings.shopify_store_domain,
+            store_domain=current_shopify_store_domain(),
             storefront_domain=storefront_domain,
             overview=AnalyticsOverview(
                 chat_interactions=0,
@@ -1684,7 +1714,7 @@ class SupabaseService:
             resolved_store_domain = (
                 profile_payload.get("connected_store_domain")
                 or merchant_row.get("shopify_store_domain")
-                or settings.shopify_store_domain
+                or current_shopify_store_domain()
             )
             resolved_storefront_domain = (
                 profile_payload.get("storefront_domain")
@@ -2265,7 +2295,7 @@ class SupabaseService:
         )
 
     def _dashboard_product_url(self, handle: Optional[str]) -> Optional[str]:
-        storefront_domain = settings.shopify_storefront_domain or settings.shopify_store_domain
+        storefront_domain = current_storefront_domain() or current_shopify_store_domain()
         if not handle or not storefront_domain:
             return None
 

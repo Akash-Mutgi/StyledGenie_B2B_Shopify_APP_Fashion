@@ -5,6 +5,7 @@ from dataclasses import dataclass, field as dataclass_field
 from typing import Optional
 
 from app.config import settings
+from app.security.tenant_context import current_storefront_domain
 from app.models.schemas import GapAnalysis, ImageAnalysisSummary, ProductRecommendation, ShopperProfile
 from app.services.catalog_intelligence_service import CatalogIntelligenceService
 from app.services.shopify_service import ShopifyService
@@ -2629,7 +2630,7 @@ class RecommendationService:
 
     def _product_url(self, item: dict) -> Optional[str]:
         handle = item.get("handle")
-        storefront_domain = settings.shopify_storefront_domain or settings.shopify_store_domain
+        storefront_domain = current_storefront_domain() or current_shopify_store_domain()
         if handle and storefront_domain:
             normalized_domain = storefront_domain.replace("https://", "").replace("http://", "").strip("/")
             return f"https://{normalized_domain}/products/{handle}"

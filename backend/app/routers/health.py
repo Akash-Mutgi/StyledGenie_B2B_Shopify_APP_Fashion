@@ -18,6 +18,13 @@ def runtime_status() -> dict[str, object]:
     """Expose connection readiness without ever returning credentials."""
     langchain = LangChainService().runtime_status()
     vision = VisionService().runtime_status()
+    shop_domain = (settings.shopify_store_domain or "").lower().strip()
+    store_handle = shop_domain.removesuffix(".myshopify.com")
+    merchant_admin_url = (
+        f"https://admin.shopify.com/store/{store_handle}/apps/{settings.shopify_client_id}/app"
+        if store_handle and settings.shopify_client_id
+        else None
+    )
     return {
         "status": "ready" if settings.openai_api_key and vision.vision_ready else "configuration_required",
         "openai_ready": bool(settings.openai_api_key),
@@ -25,5 +32,6 @@ def runtime_status() -> dict[str, object]:
         "google_vision_ready": vision.vision_ready,
         "google_vision_mode": vision.vision_mode,
         "langchain_ready": langchain.langchain_ready,
+        "merchant_admin_url": merchant_admin_url,
     }
 
