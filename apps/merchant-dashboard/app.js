@@ -1,17 +1,45 @@
 (() => {
   const protectedPath = /\/api\/(merchant|analytics|catalog\/import)\b/;
   const nativeFetch = window.fetch.bind(window);
+  const shopifyAppClientId = "f8e70566e9eb35af417fdcae7d6d5b4a";
+  let shopifyAppBridgePromise;
+
+  function ensureShopifyAppBridge() {
+    if (window.shopify && typeof window.shopify.idToken === "function") {
+      return Promise.resolve(window.shopify);
+    }
+    if (!shopifyAppBridgePromise) {
+      let apiKeyMeta = document.querySelector('meta[name="shopify-api-key"]');
+      if (!apiKeyMeta) {
+        apiKeyMeta = document.createElement("meta");
+        apiKeyMeta.name = "shopify-api-key";
+        document.head.prepend(apiKeyMeta);
+      }
+      apiKeyMeta.content = shopifyAppClientId;
+
+      const existingScript = document.querySelector('script[src*="app-bridge.js"]');
+      if (existingScript) existingScript.remove();
+      shopifyAppBridgePromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
+        script.onload = () => resolve(window.shopify);
+        script.onerror = () => reject(new Error("Shopify App Bridge failed to load."));
+        document.head.append(script);
+      });
+    }
+    return shopifyAppBridgePromise;
+  }
+
   window.fetch = async (input, init = {}) => {
     const url = typeof input === "string" ? input : input.url;
     if (!protectedPath.test(url)) return nativeFetch(input, init);
     const headers = new Headers(init.headers || {});
-    if (window.shopify && typeof window.shopify.idToken === "function") {
-      try {
-        const token = await window.shopify.idToken();
-        if (token) headers.set("Authorization", `Bearer ${token}`);
-      } catch (_error) {
-        // Let the API return its normal 401 response when the app is outside Shopify Admin.
-      }
+    try {
+      const shopify = await ensureShopifyAppBridge();
+      const token = await shopify?.idToken?.();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+    } catch (_error) {
+      // Let the API return its normal 401 response when the app is outside Shopify Admin.
     }
     return nativeFetch(input, { ...init, headers });
   };

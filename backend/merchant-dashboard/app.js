@@ -11,16 +11,43 @@ const toastMessage = document.getElementById("toastMessage");
 const toastCloseButton = document.getElementById("toastCloseButton");
 const navButtons = Array.from(document.querySelectorAll(".nav-button"));
 const apiBaseUrl = resolveApiBaseUrl();
+const shopifyAppClientId = "f8e70566e9eb35af417fdcae7d6d5b4a";
+let shopifyAppBridgePromise;
+
+function ensureShopifyAppBridge() {
+  if (window.shopify && typeof window.shopify.idToken === "function") {
+    return Promise.resolve(window.shopify);
+  }
+  if (!shopifyAppBridgePromise) {
+    let apiKeyMeta = document.querySelector('meta[name="shopify-api-key"]');
+    if (!apiKeyMeta) {
+      apiKeyMeta = document.createElement("meta");
+      apiKeyMeta.name = "shopify-api-key";
+      document.head.prepend(apiKeyMeta);
+    }
+    apiKeyMeta.content = shopifyAppClientId;
+
+    const existingScript = document.querySelector('script[src*="app-bridge.js"]');
+    if (existingScript) existingScript.remove();
+    shopifyAppBridgePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
+      script.onload = () => resolve(window.shopify);
+      script.onerror = () => reject(new Error("Shopify App Bridge failed to load."));
+      document.head.append(script);
+    });
+  }
+  return shopifyAppBridgePromise;
+}
 
 async function merchantApiFetch(input, init = {}) {
   const headers = new Headers(init.headers || {});
-  if (window.shopify && typeof window.shopify.idToken === "function") {
-    try {
-      const sessionToken = await window.shopify.idToken();
-      if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
-    } catch (error) {
-      // Let the API return its standard 401 response when Shopify auth is unavailable.
-    }
+  try {
+    const shopify = await ensureShopifyAppBridge();
+    const sessionToken = await shopify?.idToken?.();
+    if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+  } catch (error) {
+    // Let the API return its standard 401 response when Shopify auth is unavailable.
   }
   return fetch(input, { ...init, headers });
 }
