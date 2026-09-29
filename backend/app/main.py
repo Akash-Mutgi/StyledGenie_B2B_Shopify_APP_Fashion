@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -54,5 +54,8 @@ if storefront_widget_dir.exists():
 app.mount("/static", StaticFiles(directory=backend_root / "static"), name="static")
 
 @app.get("/", include_in_schema=False)
-def root_redirect() -> RedirectResponse:
-    return RedirectResponse(url="/merchant-dashboard/")
+def root_redirect(request: Request) -> RedirectResponse:
+    dashboard_url = "/merchant-dashboard/"
+    if request.url.query:
+        dashboard_url = f"{dashboard_url}?{request.url.query}"
+    return RedirectResponse(url=dashboard_url)
